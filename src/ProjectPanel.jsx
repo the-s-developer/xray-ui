@@ -1,28 +1,39 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Edit2, Save, X, Upload, Download, Copy, Maximize2, Play, Trash2, RotateCw, ClipboardPaste
+  Plus, Edit2, Save, X, Upload, Download, Copy, Maximize2, Play, Trash2, RotateCw, ClipboardPaste,List
 } from "lucide-react";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import toast from "react-hot-toast";
 import { fetchWithLog } from "./utils/fetchWithLog";
 
-// API helpers
+const PAGE_SIZE = 10;
+
+
 async function fetchProjects() {
-  const res = await fetchWithLog("/api/projects");
+  const res = await fetchWithLog("/api/project");
   return await res.json();
 }
 async function fetchScripts(projectId) {
-  const res = await fetchWithLog(`/api/projects/${projectId}/scripts`);
+  const res = await fetchWithLog(`/api/project/${projectId}/script`);
   return await res.json();
 }
-async function fetchExecutions(projectId) {
-  const res = await fetchWithLog(`/api/projects/${projectId}/executions`);
-  return await res.json();
+async function fetchExecutions(
+  projectId,
+  { page = 1, pageSize = 20, scriptId = "", status = "" } = {}
+) {
+  let url = `/api/project/${projectId}/execution?page=${page}&page_size=${pageSize}`;
+  if (scriptId) url += `&script_id=${scriptId}`;
+  if (status) url += `&status=${status}`;
+  const res = await fetch(url);
+  return await res.json(); // Beklenen: {executions, total}
 }
+
+
 function formatDate(dt) {
   if (!dt) return "-";
   return new Date(dt).toLocaleString();
 }
+
 
 // Ortak stil
 const iconBtnStyle = {
@@ -104,6 +115,8 @@ export default function ProjectPanel() {
   const [outputFullOpen, setOutputFullOpen] = useState(false);
   const [logsFullOpen, setLogsFullOpen] = useState(false);
 
+  const [execModalOpen, setExecModalOpen] = useState(false);
+
 
   // Projeleri yükle
   useEffect(() => {
@@ -111,32 +124,36 @@ export default function ProjectPanel() {
   }, []);
 
   // Proje seçilince script ve execution çek
-  useEffect(() => {
-    if (!selected) {
-      setScripts([]);
-      setExecutions([]);
-      setSelectedScript(null);
-      setSelectedExecution(null);
-      return;
-    }
-    fetchScripts(selected.projectId).then(scs => {
-      setScripts(scs);
-      setSelectedScript(scs[0] || null);
-    });
-    fetchExecutions(selected.projectId).then(setExecutions);
-  }, [selected]);
+useEffect(() => {
+  if (!selected) {
+    setScripts([]);
+    setExecutions([]); // Array olarak sıfırla
+    setSelectedScript(null);
+    setSelectedExecution(null);
+    return;
+  }
+  fetchScripts(selected.projectId).then(scs => {
+    setScripts(scs);
+    setSelectedScript(scs[0] || null);
+  });
+  fetchExecutions(selected.projectId).then(res => {
+    setExecutions(res.executions || res || []); // Sadece array!
+  });
+}, [selected]);
 
   // Script değişince executionları filtrele
-  useEffect(() => {
-    if (!selectedScript) {
-      setFilteredExecutions([]);
-      setSelectedExecution(null);
-      return;
-    }
-    const ex = (executions || []).filter(e => e.scriptId === selectedScript.scriptId);
-    setFilteredExecutions(ex);
-    setSelectedExecution(ex[ex.length - 1] || null);
-  }, [selectedScript, executions]);
+useEffect(() => {
+  // Emin olmak için array olduğundan emin ol
+  const arr = Array.isArray(executions) ? executions : (executions.executions || []);
+  if (!selectedScript) {
+    setFilteredExecutions([]);
+    setSelectedExecution(null);
+    return;
+  }
+  const ex = arr.filter(e => e.scriptId === selectedScript.scriptId);
+  setFilteredExecutions(ex);
+  setSelectedExecution(ex[ex.length - 1] || null);
+}, [selectedScript, executions]);
 
   // Edit script code sync
   useEffect(() => {
@@ -187,17 +204,21 @@ export default function ProjectPanel() {
     }
   }
 
-
-  function handleNewProject() {
-    setSelected(null);
-    setForm({ projectName: "", projectDescription: "" });
-    setEditMode(true);
-    setSelectedScript(null);
-    setSelectedExecution(null);
-  }
-
-  function handleEditProject() {
-    setEditMode(true);
+  async function handleDeleteProject() {
+    if (!selected || !selected.projectId) return;
+    const ok = window.confirm(
+      `"${selected.projectName}" adlı projeyi ve tüm bağlı verileri silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz!`
+    );
+    if (!ok) return;
+    try {
+      await fetchWithLog(`/api/project/${selected.projectId}`, { method: "DELETE" });
+      toast.success("Proje silindi!");
+      setProjects(ps => ps.filter(p => p.projectId !== selected.projectId));
+      setSelected(null);
+      setEditMode(false);
+    } catch (err) {
+      toast.error("Proje silinemedi: " + err.message);
+    }
   }
 
   async function handleRunSelectedScript() {
@@ -208,7 +229,7 @@ export default function ProjectPanel() {
     setRunError("");
     setRunPanelOpen(true);
     try {
-      const res = await fetchWithLog(`/api/projects/${selected.projectId}/run`, {
+      const res = await fetchWithLog(`/api/project/${selected.projectId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scriptId: selectedScript.scriptId })
@@ -222,15 +243,15 @@ export default function ProjectPanel() {
       setRunLogs(data.execution.logs || "");
       setRunError(data.execution.errorMessage || "");
 
-      // ÇALIŞTIRMA GEÇMİŞİNİ TEKRAR YÜKLE
-      const executionsRes = await fetch(`/api/projects/${selected.projectId}/executions`);
+      // Çalıştırma geçmişini tekrar yükle
+      const executionsRes = await fetchWithLog(`/api/project/${selected.projectId}/execution`);
       const executionsData = await executionsRes.json();
-      //if executions is not array, throw error
       setExecutions(executionsData);
 
-      const currentScriptExecutions = executionsData.filter(
-        ex => ex.scriptId === selectedScript.scriptId
-      );
+const currentScriptExecutions = (executionsData.executions || []).filter(
+  ex => ex.scriptId === selectedScript.scriptId
+);
+
       setFilteredExecutions(currentScriptExecutions);
       setSelectedExecution(currentScriptExecutions[0] || null);
     } catch (err) {
@@ -241,6 +262,7 @@ export default function ProjectPanel() {
     setRunLoading(false);
   }
 
+  // -- PROMPT ENDPOINTLERİ --
   async function handleLoadPromptsToChat() {
     if (!selected?.prompts || selected.prompts.length === 0) {
       alert("Bu projede yüklü prompt yok!");
@@ -264,7 +286,7 @@ export default function ProjectPanel() {
       const ok = window.confirm("Bu projede zaten prompt var. Eski promptlar silinerek yenileri kaydedilecek. Devam edilsin mi?");
       if (!ok) return;
     }
-    await fetchWithLog(`/api/projects/${selected.projectId}/prompts`, {
+    await fetchWithLog(`/api/project/${selected.projectId}/prompts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(prompts),
@@ -283,7 +305,7 @@ export default function ProjectPanel() {
       let proj;
       if (selected && selected.projectId) {
         // Güncelleme
-        const res = await fetchWithLog(`/api/projects/${selected.projectId}`, {
+        const res = await fetchWithLog(`/api/project/${selected.projectId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
@@ -292,7 +314,7 @@ export default function ProjectPanel() {
         toast.success("Proje güncellendi!");
       } else {
         // Yeni proje ekleme
-        const res = await fetchWithLog("/api/projects", {
+        const res = await fetchWithLog("/api/project", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
@@ -312,25 +334,18 @@ export default function ProjectPanel() {
     }
   }
 
-
-  function handleCancel() {
-    setEditMode(false);
-    if (!selected) setForm({ projectName: "", projectDescription: "" });
-  }
-
-  // SCRIPT VERSİYONU YENİLEME
+  // --- SCRIPT ENDPOINTLER ---
   async function handleRefreshScripts() {
     if (!selected) return;
     fetchScripts(selected.projectId).then(setScripts);
     fetchExecutions(selected.projectId).then(setExecutions);
     toast.success("Script versiyonları yenilendi!");
   }
-  // --- Script Edit: Yeni Versiyon Olarak Kaydet ---
+
   async function handleUpdateScript(value) {
     if (!selectedScript) return;
-
-    // Güncel scripti güncelle
-    const res = await fetchWithLog(`/api/scripts/${selectedScript.scriptId}`, {
+    // Güncel scripti güncelle (PUT)
+    const res = await fetchWithLog(`/api/project/${selected.projectId}/script/${selectedScript.scriptId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -338,35 +353,25 @@ export default function ProjectPanel() {
         // notes: "isteğe bağlı not"
       }),
     });
-
-    // Güncellenen scriptin versiyon bilgisini al
     const updatedScript = await res.json();
 
     setEditScriptOpen(false);
-
-    // Script listesini güncelle
     const updatedScripts = await fetchScripts(selected.projectId);
     setScripts(updatedScripts);
-
-    // Seçili scripti güncel tut
     const updated = updatedScripts.find(s => s.scriptId === selectedScript.scriptId);
     setSelectedScript(updated || updatedScripts[0] || null);
-
-    // Versiyon bilgisini toast’ta göster
     toast.success(
       `Script başarıyla güncellendi (versiyon: v${updatedScript.version})`
     );
   }
 
-
   async function handleSaveNewScript(value) {
     try {
-      await fetchWithLog(`/api/scripts`, {
+      await fetchWithLog(`/api/project/${selected.projectId}/script`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: value,
-          projectId: selected.projectId,
           createdBy: "user",
         }),
       });
@@ -381,28 +386,45 @@ export default function ProjectPanel() {
     }
   }
 
-
-
-  // SCRIPT VERSİYONU SİLME
   async function handleDeleteScript() {
     if (!selectedScript) return;
     if (!window.confirm("Bu script versiyonunu silmek istediğinize emin misiniz?")) return;
-    await fetch(`/api/scripts/${selectedScript.scriptId}`, { method: "DELETE" });
-    // Script listesini güncelle ve ilk sıradaki script'i otomatik seç
+    await fetchWithLog(`/api/project/${selected.projectId}/script/${selectedScript.scriptId}`, { method: "DELETE" });
     fetchScripts(selected.projectId).then((scripts) => {
       setScripts(scripts);
-      setSelectedScript(scripts[0] || null); // Otomatik yeni script seç
+      setSelectedScript(scripts[0] || null);
     });
     toast.success("Script silindi!");
   }
 
+  function handleNewProject() {
+    setSelected(null);
+    setForm({ projectName: "", projectDescription: "" });
+    setEditMode(true);
+    setSelectedScript(null);
+    setSelectedExecution(null);
+  }
 
+  function handleEditProject() {
+    setEditMode(true);
+  }
+
+  
+  function handleCancel() {
+    setEditMode(false);
+    if (!selected) setForm({ projectName: "", projectDescription: "" });
+  }
   const filtered = projects.filter(p =>
     (p.projectName || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const sortedExecutions = [...filteredExecutions].sort(
+  (a, b) => new Date(b.startTime) - new Date(a.startTime)
+);
+const lastExecutions = sortedExecutions.slice(0, 10);
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f4f5fa" }}>
+      <div style={{ minHeight: "100vh", background: "#f4f5fa" }}>
       {/* HEADER BAR */}
       <div style={{
         background: "#fff", padding: 16, borderBottom: "1.5px solid #e5e7eb", position: "relative", zIndex: 10
@@ -420,7 +442,6 @@ export default function ProjectPanel() {
                 background: "#f7f8fa", fontWeight: 500
               }}
             />
-            {/* Dropdown */}
             <div style={{
               maxHeight: expanded ? 320 : 0,
               overflow: "hidden",
@@ -454,7 +475,6 @@ export default function ProjectPanel() {
               )}
             </div>
           </div>
-          {/* Yeni Proje Butonu */}
           <button
             style={{
               marginLeft: 10, background: "#6366f1", color: "#fff",
@@ -468,7 +488,6 @@ export default function ProjectPanel() {
           </button>
         </div>
       </div>
-
       {/* PROJE DETAY */}
       <div>
         {editMode ? (
@@ -517,6 +536,7 @@ export default function ProjectPanel() {
               >
                 <X size={27} />
               </button>
+
             </div>
           </div>
         ) : selected ? (
@@ -543,6 +563,23 @@ export default function ProjectPanel() {
                 borderRadius: 8, padding: "8px 22px", fontWeight: 700, fontSize: 17, cursor: "pointer"
               }}><Edit2 size={20} /></button>
               <button
+                title="Projeyi sil"
+                onClick={handleDeleteProject}
+                style={{
+                  background: "#f87171",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 18px",
+                  fontWeight: 700,
+                  fontSize: 17,
+                  cursor: "pointer",
+                  marginLeft: 6
+                }}
+              >
+                <Trash2 size={20} />
+              </button>
+              <button
                 title="Projeden chat'e promptları yükle"
                 onClick={handleLoadPromptsToChat}
                 style={{
@@ -560,6 +597,7 @@ export default function ProjectPanel() {
                 }}>
                 <Download size={20} style={{ marginRight: 5, marginBottom: -3 }} />
               </button>
+
             </div>
             <div style={{ color: "#9ca3af", fontSize: 14, margin: "2px 0 16px 2px" }}>
               {formatDate(selected.updatedAt)}
@@ -793,30 +831,33 @@ export default function ProjectPanel() {
 
             {/* Çalıştırma geçmişi ve detay paneli */}
             <div>
-              {/*<div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>history:</div>*/}
+       <div>
               <div style={{
-                maxHeight: 220,
-                overflowY: "auto",
-                border: "1px solid #eee",
-                borderRadius: 8,
-                background: "#f8fafc",
-                marginBottom: 16
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                margin: "20px 0 2px 0"
               }}>
-                {filteredExecutions.slice(-10).reverse().map(ex => (
-                  <div
-                    key={ex.executionId + ex.startTime}
-                    onClick={() => setSelectedExecution(ex)}
-                    style={{
-                      padding: "8px 18px",
-                      borderBottom: "1px solid #e5e7eb",
-                      background: selectedExecution?.executionId === ex.executionId && selectedExecution?.startTime === ex.startTime ? "#e0e7ff" : "transparent",
-                      cursor: "pointer"
-                    }}
-                  >
-                    <b>{ex.status}</b> <span style={{ color: "#64748b" }}>{formatDate(ex.startTime)}</span> v{ex.scriptVersion}
-                  </div>
-                ))}
+                <b style={{ fontSize: 17, color: "#444" }}>Son Çalıştırmalar</b>
+                <button style={{
+                  border: "none", background: "#e0e7ef", color: "#444", borderRadius: 7, padding: "4px 14px", cursor: "pointer"
+                }} onClick={() => setExecModalOpen(true)}>
+                  <List size={18} style={{ marginRight: 6, marginBottom: -2 }} />
+                </button>
               </div>
+              {lastExecutions.map(ex => (
+                <div
+                  key={ex.executionId + ex.startTime}
+                  onClick={() => setSelectedExecution(ex)}
+                  style={{
+                    padding: "8px 18px",
+                    borderBottom: "1px solid #e5e7eb",
+                    background: selectedExecution?.executionId === ex.executionId && selectedExecution?.startTime === ex.startTime ? "#e0e7ff" : "transparent",
+                    cursor: "pointer"
+                  }}
+                >
+                  <b>{ex.status}</b> <span style={{ color: "#64748b" }}>{formatDate(ex.startTime)}</span> v{ex.scriptVersion}
+                </div>
+              ))}
+            </div>
               {/* Seçili çalıştırmanın detay paneli */}
               {selectedScript && selectedExecution && (
                 <div style={{
@@ -909,8 +950,10 @@ export default function ProjectPanel() {
                           marginBottom: 0,
                           whiteSpace: "pre-wrap"
                         }}>
-                          {selectedExecution.output || <span style={{ color: "#888" }}></span>}
-                        </pre>
+                            {typeof selectedExecution.output === "string"
+                              ? selectedExecution.output
+                              : JSON.stringify(selectedExecution.output, null, 2)}                        
+                      </pre>
                       </div>
                     )}
                     {/* Logs Tabı */}
@@ -989,7 +1032,9 @@ export default function ProjectPanel() {
                     onCancel={() => setLogsFullOpen(false)}
                     readOnly={true}
                   />
+
                 </div>
+                
               )}
 
             </div>
@@ -1069,6 +1114,338 @@ export default function ProjectPanel() {
           </div>
         </div>
       )}
+          <ExecutionHistoryModal
+      open={execModalOpen}
+      onClose={() => setExecModalOpen(false)}
+      projectId={selected?.projectId}
+      scriptId={selectedScript?.scriptId}
+      scripts={scripts}
+    />
+    </div>
+  );
+}
+
+
+
+// ---- MODAL ----
+function ExecutionHistoryModal({ open, onClose, projectId, scriptId, scripts }) {
+  const [page, setPage] = useState(1);
+  const [executions, setExecutions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [selectedExecution, setSelectedExecution] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedScriptId, setSelectedScriptId] = useState(scriptId || "");
+
+  // Output/Logs tabları ve fullscreen editör için state'ler
+  const [execTab, setExecTab] = useState("output");
+  const [outputFullOpen, setOutputFullOpen] = useState(false);
+  const [logsFullOpen, setLogsFullOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !projectId) return;
+    setLoading(true);
+    fetchExecutions(projectId, {
+      page,
+      pageSize: PAGE_SIZE,
+      scriptId: selectedScriptId
+    }).then(res => {
+      setExecutions(res.executions || []);
+      setTotal(res.total || 0);
+      setSelectedExecution((res.executions && res.executions[0]) || null);
+      setLoading(false);
+    });
+  }, [open, projectId, page, selectedScriptId]);
+
+  // execution değişince tabı sıfırla
+  useEffect(() => {
+    setExecTab("output");
+  }, [selectedExecution]);
+
+  if (!open) return null;
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 5000,
+      background: "rgba(30,34,40,0.28)", display: "flex", alignItems: "center", justifyContent: "center"
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 16, minWidth: 1000, minHeight: 540, maxWidth: "95vw", maxHeight: "95vh",
+        boxShadow: "0 12px 48px #0005", display: "flex", flexDirection: "column", position: "relative"
+      }}>
+        {/* Kapat */}
+        <button onClick={onClose}
+          style={{ position: "absolute", top: 15, right: 20, border: "none", background: "#e0e7ef", borderRadius: 6, padding: 6, cursor: "pointer" }}>
+          <X size={21} />
+        </button>
+        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+          {/* SOL MASTER */}
+          <div style={{
+            width: 350, borderRight: "1.7px solid #e5e7eb", overflowY: "auto", padding: 0, display: "flex", flexDirection: "column"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "18px 24px 10px 20px", background: "#f4f6fa", borderBottom: "1.3px solid #eee" }}>
+              <List size={19} style={{ marginRight: 7 }} />
+              <b>Çalıştırma Geçmişi</b>
+            </div>
+            <div style={{ padding: 12 }}>
+              <select
+                value={selectedScriptId}
+                style={{ width: "100%", borderRadius: 7, border: "1.2px solid #e0e7ef", fontSize: 15, marginBottom: 9 }}
+                onChange={e => { setSelectedScriptId(e.target.value); setPage(1); }}
+              >
+                <option value="">Tüm Scriptler</option>
+                {scripts.map(s => (
+                  <option key={s.scriptId} value={s.scriptId}>
+                    v{s.version} - {formatDate(s.createdAt)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              {loading ? <div style={{ padding: 40, textAlign: "center" }}>Yükleniyor...</div> :
+                executions.length === 0 ? (
+                  <div style={{ color: "#888", padding: 28, textAlign: "center" }}>Geçmiş yok</div>
+                ) : (
+                  executions.map(ex => (
+                    <div
+                      key={ex.executionId + ex.startTime}
+                      onClick={() => setSelectedExecution(ex)}
+                      style={{
+                        padding: "9px 16px",
+                        borderBottom: "1px solid #f1f5f9",
+                        background: selectedExecution?.executionId === ex.executionId ? "#e0e7ff" : "transparent",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <b>{ex.status}</b>{" "}
+                      <span style={{ color: "#64748b" }}>{formatDate(ex.startTime)}</span>
+                      <br />
+                      <span style={{ fontSize: 12, color: "#888" }}>v{ex.scriptVersion}</span>
+                    </div>
+                  ))
+                )}
+            </div>
+            {/* Sayfalama */}
+            <div style={{
+              padding: "8px 24px",
+              borderTop: "1.2px solid #e0e7ef",
+              display: "flex", justifyContent: "center", alignItems: "center"
+            }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{ border: "none", background: "#e5e7eb", borderRadius: 7, padding: "4px 12px", marginRight: 7, cursor: page === 1 ? "not-allowed" : "pointer" }}
+              >&lt;</button>
+              <span style={{ fontSize: 14, fontWeight: 600, margin: "0 5px" }}>{page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
+              <button
+                onClick={() => setPage(p => (p * PAGE_SIZE < total ? p + 1 : p))}
+                disabled={page * PAGE_SIZE >= total}
+                style={{ border: "none", background: "#e5e7eb", borderRadius: 7, padding: "4px 12px", marginLeft: 7, cursor: page * PAGE_SIZE >= total ? "not-allowed" : "pointer" }}
+              >&gt;</button>
+            </div>
+          </div>
+          {/* SAĞ DETAY */}
+          <div style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            padding: "32px 32px 32px 24px"
+          }}>
+            {!selectedExecution ? (
+              <div style={{ color: "#aaa", padding: 64, textAlign: "center" }}>Bir kayıt seçin</div>
+            ) : (
+              <>
+                {/* Başlık ve info */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 19, marginBottom: 13 }}>Çalıştırma Detayı</div>
+                  <div style={{ marginBottom: 14, fontSize: 14 }}>
+                    <b>Status:</b> {selectedExecution.status} <br />
+                    <b>Başlangıç:</b> {formatDate(selectedExecution.startTime)} <br />
+                    <b>Script Version:</b> v{selectedExecution.scriptVersion}
+                  </div>
+                </div>
+                {/* Tab ve içerik */}
+                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  {/* Tablar */}
+                  <div style={{
+                    display: "flex",
+                    borderBottom: "1.4px solid #e0e7ef",
+                    alignItems: "center"
+                  }}>
+                    <button
+                      style={{
+                        padding: "12px 30px 10px 28px",
+                        border: "none",
+                        borderBottom: execTab === "output" ? "2.5px solid #6366f1" : "none",
+                        background: "none",
+                        fontWeight: 600,
+                        fontSize: 17,
+                        color: execTab === "output" ? "#3b3c48" : "#7b8399",
+                        cursor: "pointer"
+                      }}
+                      onClick={() => setExecTab("output")}
+                    >Output</button>
+                    <button
+                      style={{
+                        padding: "12px 30px 10px 28px",
+                        border: "none",
+                        borderBottom: execTab === "logs" ? "2.5px solid #6366f1" : "none",
+                        background: "none",
+                        fontWeight: 600,
+                        fontSize: 17,
+                        color: execTab === "logs" ? "#3b3c48" : "#7b8399",
+                        cursor: "pointer"
+                      }}
+                      onClick={() => setExecTab("logs")}
+                    >Logs</button>
+                  </div>
+                  {/* Output/Logs İçeriği */}
+                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
+                    {/* Output Tab */}
+                    {execTab === "output" && (
+                      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
+                        {/* İkonlar */}
+                        <div style={{
+                          position: "absolute", top: 10, right: 16, display: "flex", gap: 8, zIndex: 2
+                        }}>
+                          <button
+                            title="Tam ekran"
+                            style={{
+                              background: "#e0e7ef",
+                              border: "none",
+                              color: "#222",
+                              borderRadius: 7,
+                              padding: 3,
+                              cursor: "pointer"
+                            }}
+                            onClick={() => setOutputFullOpen(true)}
+                            disabled={!selectedExecution.output}
+                          >
+                            <Maximize2 size={16} />
+                          </button>
+                          <button
+                            title="Panoya kopyala"
+                            style={{
+                              background: "#e0e7ef",
+                              border: "none",
+                              color: "#222",
+                              borderRadius: 7,
+                              padding: 3,
+                              cursor: "pointer"
+                            }}
+                            onClick={() => {
+                              if (navigator.clipboard && selectedExecution.output) {
+                                navigator.clipboard.writeText(selectedExecution.output);
+                              }
+                            }}
+                            disabled={!selectedExecution.output}
+                          >
+                            <Copy size={16} />
+                          </button>
+                        </div>
+                        <pre style={{
+                          background: "#e0e7ef",
+                          color: "#222",
+                          borderRadius: 10,
+                          padding: "16px 32px 16px 16px",
+                          flex: 1,
+                          minHeight: 0,
+                          overflow: "auto",
+                          fontFamily: "Fira Mono, Menlo, monospace",
+                          fontSize: 15,
+                          marginTop: 0,
+                          marginBottom: 0,
+                          whiteSpace: "pre-wrap"
+                        }}>
+                          {selectedExecution.output || <span style={{ color: "#888" }}></span>}
+                        </pre>
+                      </div>
+                    )}
+                    {/* Logs Tab */}
+                    {execTab === "logs" && (
+                      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
+                        {/* İkonlar */}
+                        <div style={{
+                          position: "absolute", top: 10, right: 16, display: "flex", gap: 8, zIndex: 2
+                        }}>
+                          <button
+                            title="Tam ekran"
+                            style={{
+                              background: "#f1f5f9",
+                              border: "none",
+                              color: "#334155",
+                              borderRadius: 7,
+                              padding: 3,
+                              cursor: "pointer"
+                            }}
+                            onClick={() => setLogsFullOpen(true)}
+                            disabled={!selectedExecution.logs}
+                          >
+                            <Maximize2 size={16} />
+                          </button>
+                          <button
+                            title="Panoya kopyala"
+                            style={{
+                              background: "#f1f5f9",
+                              border: "none",
+                              color: "#334155",
+                              borderRadius: 7,
+                              padding: 3,
+                              cursor: "pointer"
+                            }}
+                            onClick={() => {
+                              if (navigator.clipboard && selectedExecution.logs) {
+                                navigator.clipboard.writeText(selectedExecution.logs);
+                              }
+                            }}
+                            disabled={!selectedExecution.logs}
+                          >
+                            <Copy size={16} />
+                          </button>
+                        </div>
+                        <pre style={{
+                          background: "#f1f5f9",
+                          color: "#334155",
+                          borderRadius: 10,
+                          padding: "16px 32px 16px 16px",
+                          flex: 1,
+                          minHeight: 0,
+                          overflow: "auto",
+                          fontFamily: "Fira Mono, Menlo, monospace",
+                          fontSize: 14,
+                          marginTop: 0,
+                          marginBottom: 0,
+                          whiteSpace: "pre-wrap"
+                        }}>
+                          {selectedExecution.logs || <span style={{ color: "#888" }}></span>}
+                        </pre>
+                      </div>
+                    )}
+                    {/* Fullscreen Editorlar */}
+                    <FullScreenCodeEditor
+                      open={outputFullOpen}
+                      initialValue={selectedExecution.output || ""}
+                      language="json"
+                      title="Output"
+                      onDone={() => setOutputFullOpen(false)}
+                      onCancel={() => setOutputFullOpen(false)}
+                      readOnly={true}
+                    />
+                    <FullScreenCodeEditor
+                      open={logsFullOpen}
+                      initialValue={selectedExecution.logs || ""}
+                      language="plaintext"
+                      title="Logs"
+                      onDone={() => setLogsFullOpen(false)}
+                      onCancel={() => setLogsFullOpen(false)}
+                      readOnly={true}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

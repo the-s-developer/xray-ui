@@ -11,23 +11,6 @@ import { fetchWithLog } from "./utils/fetchWithLog";
 import { useCallContext } from "./CallContext";
 import toast from "react-hot-toast";
 
-const MODELS = [
-  { value: "gpt-4.1-nano", label: "gpt-4.1-nano 0.4$ (1M)" },
-  { value: "gpt-4.1-mini", label: "gpt-4.1-mini 1.6$ (1M)" },
-  { value: "gpt-4.1", label: "gpt-4.1 8$ (1M)" },
-  { value: "gpt-4o", label: "gpt-4o 10$ (128K)" },
-  { value: "gpt-4o-mini", label: "gpt-4o-mini 0.6$ (128K)" },
-  { value: "o4-mini", label: "o4-mini 4.4$ (200K)" },
-  { value: "o3", label: "o3 40$ (200K)" },
-  { value: "o3-mini", label: "o3-mini 4.4$ (8K)" },
-  { value: "o1", label: "o1 60$ (16K)" },
-  { value: "o1-mini", label: "o1-mini 4.4$ (8K)" },
-  { value: "qwen3:14b", label: "qwen3 14b (ollama)" },
-  { value: "qwen3:8b", label: "qwen3 8b (ollama)" },
-  { value: "devstral:24b-small-2505-q8_0", label: "mistral devstral:24b-small-2505-q8_0 (ollama)" },
-  { value: "devstral:24b", label: "mistral devstral:24b Q4_K_M (ollama)" },
-  { value: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M", label: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M (ollama)" },
-];
 const AgentState = {
   IDLE: "idle",
   GENERATING: "generating",
@@ -283,11 +266,10 @@ export default function ChatPanel({ memory }) {
   const { showImagePreview, showCodeLineNumbers, codeWrap, enterToSend, bubbleFontScale } = settings;
   const { agentStatus } = useCallContext();
 
-  const modelOptions = MODELS;
-  const [defaultModel, setDefaultModel] = useState(() =>
-    localStorage.getItem("selectedModel") ||
-    (modelOptions.length ? modelOptions[0].value : "")
-  );
+   const [modelOptions, setModelOptions] = useState([]);
+  const [defaultModel, setDefaultModel] = useState("");
+
+
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [fullScreenEditorOpen, setFullScreenEditorOpen] = useState(false);
@@ -297,6 +279,7 @@ export default function ChatPanel({ memory }) {
   const [assistantEditorInitialValue, setAssistantEditorInitialValue] = useState("");
   const [insertAfterId, setInsertAfterId] = useState(null);
   const [insertModalOpen, setInsertModalOpen] = useState(false);
+
 
   const chatEndRef = useRef();
   const flattenedChat = getFlattenedChat(memory, true);
@@ -330,7 +313,30 @@ const [lastTps, setLastTps] = useState(0);
     setStreaming(false);
   }, [memory]);
 
-
+useEffect(() => {
+  async function fetchModels() {
+    try {
+      const res = await fetch("/api/models");
+      const data = await res.json();
+      if (Array.isArray(data.models)) {
+        setModelOptions(data.models);
+        // LocalStorage veya ilk model:
+        const saved = localStorage.getItem("selectedModel");
+        if (saved && data.models.some(m => m.value === saved)) {
+          setDefaultModel(saved);
+        } else if (data.models.length) {
+          setDefaultModel(data.models[0].value);
+        }
+      }
+    } catch (err) {
+      setModelOptions([]);
+    }
+  }
+  fetchModels();
+}, []);
+useEffect(() => {
+  if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
+}, [defaultModel]);
   
   function onEditBubble(content, id) {
     setEditorInitialValue(content ?? "");
@@ -508,20 +514,20 @@ async function sendMessage(e) {
 }}>
   {getStatusUI(agentStatus.state, lastTps)}
 </div>
-  <select
-    style={selectStyle}
-    value={defaultModel}
-    onChange={e => {
-      setDefaultModel(e.target.value);
-      updateSettings({ defaultModel: e.target.value });
-    }}
-    title="Model seç"
-    disabled={!defaultModel || modelOptions.length === 0}
-  >
-    {modelOptions.map(m => (
-      <option key={m.value} value={m.value}>{m.label}</option>
-    ))}
-  </select>
+<select
+  style={selectStyle}
+  value={defaultModel}
+  onChange={e => {
+    setDefaultModel(e.target.value);
+    updateSettings({ defaultModel: e.target.value });
+  }}
+  title="Model seç"
+  disabled={!defaultModel || modelOptions.length === 0}
+>
+  {modelOptions.map(m => (
+    <option key={m.value} value={m.value}>{m.label}</option>
+  ))}
+</select>
   <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
     {/* Stop Button */}
     <button
