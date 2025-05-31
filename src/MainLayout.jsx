@@ -4,7 +4,7 @@ import ChatPanel from "./ChatPanel";
 import { ToolsPanel } from "./ToolPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import ScriptPanel from "./ScriptPanel";
-import { useBridgeWebSocket } from "./BridgeWebSocketContext"; // Eksikti, ekle
+import { useCallContext } from "./CallContext"; // <-- güncel context
 import ProjectPanel from "./ProjectPanel";
 import { Toaster } from "react-hot-toast";
 
@@ -12,7 +12,7 @@ export default function MainLayout() {
   const [selected, setSelected] = useState("chat");
   const [leftWidth, setLeftWidth] = useState(1024);
   const dragging = useRef(false);
-  const { eventData } = useBridgeWebSocket();
+  const { eventData, agentStatus } = useCallContext();
   const memory = eventData.memory || null;
   const toolsVersion = eventData.toolsVersion || 0;
 
@@ -20,56 +20,36 @@ export default function MainLayout() {
     if (!dragging.current) return;
     setLeftWidth(Math.max(240, Math.min(e.clientX, window.innerWidth * 0.7)));
   }
-
   function onMouseUp() {
     dragging.current = false;
     document.body.style.cursor = "";
     window.removeEventListener("mousemove", onMouseMove);
     window.removeEventListener("mouseup", onMouseUp);
   }
-
   function onMouseDown() {
     dragging.current = true;
     document.body.style.cursor = "ew-resize";
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   }
-
-  // function renderMainContent() {
-  //    if (selected === "project") return (
-  //       <ProjectPanel
-  //         // Bunlar örnek, fonksiyonları sonra ekleyeceğiz:
-  //         onPromptsToChat={prompts => {/* Chat'e aktar */}}
-  //         onScriptToSimulator={code => {/* ScriptPanel'e aktar */}}
-  //         onReplaceChatWithPrompts={prompts => {/* Chat'i replace et */}}
-  //         onSavePromptsFromChat={() => {/* Chat'ten projeye kaydet */}}
-  //       />
-  //     );
-  //   if (selected === "chat") return <ChatPanel memory={memory} />;
-  //   if (selected === "tools") return <ToolsPanel toolsVersion={toolsVersion} />;
-  //   if (selected === "settings") return <SettingsPanel />;
-  //   return null;
-  // }
   function renderAllPanels() {
-  return (
-    <>
-      <div style={{ display: selected === "project" ? "block" : "none", height: "100%", width: "100%" }}>
-        <ProjectPanel />
-      </div>
-      <div style={{ display: selected === "chat" ? "block" : "none", height: "100%", width: "100%" }}>
-        <ChatPanel memory={memory} />
-      </div>
-      <div style={{ display: selected === "tools" ? "block" : "none", height: "100%", width: "100%" }}>
-        <ToolsPanel toolsVersion={toolsVersion} />
-      </div>
-      <div style={{ display: selected === "settings" ? "block" : "none", height: "100%", width: "100%" }}>
-        <SettingsPanel />
-      </div>
-    </>
-  );
-}
-
-
+    return (
+      <>
+        <div style={{ display: selected === "project" ? "block" : "none", height: "100%", width: "100%" }}>
+          <ProjectPanel />
+        </div>
+        <div style={{ display: selected === "chat" ? "block" : "none", height: "100%", width: "100%" }}>
+          <ChatPanel memory={memory} agentStatus={agentStatus} />
+        </div>
+        <div style={{ display: selected === "tools" ? "block" : "none", height: "100%", width: "100%" }}>
+          <ToolsPanel toolsVersion={toolsVersion} />
+        </div>
+        <div style={{ display: selected === "settings" ? "block" : "none", height: "100%", width: "100%" }}>
+          <SettingsPanel />
+        </div>
+      </>
+    );
+  }
   return (
     <div style={{
       display: "flex",
@@ -116,7 +96,6 @@ export default function MainLayout() {
         <ScriptPanel />
       </div>
       <Toaster position="top-center" toastOptions={{ duration: 1600 }} />
-
     </div>
   );
 }

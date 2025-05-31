@@ -7,10 +7,16 @@ import { Eye } from "lucide-react";
 function toMarkdownContent(val) {
   if (val == null || val === "") return "*(yanıt yok)*";
   if (typeof val === "object") {
-    return "```json\n" + JSON.stringify(val, null, 2) + "\n```";
+    try { 
+        return "```json\n" + JSON.stringify(val, null, 2) + "\n```"; 
+    }
+    catch { 
+      return String(val); 
+    }
   }
   return String(val);
 }
+
 
 export function ToolCallWithResult({ call, result }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -111,7 +117,11 @@ export function ToolCallWithResult({ call, result }) {
         color: "#f9fafb",
         padding: "10px 18px",
         fontFamily: "inherit",
-        fontSize: 15
+        fontSize: 15,
+        borderLeft: typeof parsedResult === "string" &&
+                    parsedResult.includes('"error":"TOOL EXECUTION FAILED"')
+          ? "4px solid #dc2626"
+          : undefined
       }}>
         {resultSummary}
         {typeof parsedResult === "object" && Object.entries(parsedResult).length > 2 && <span>...</span>}

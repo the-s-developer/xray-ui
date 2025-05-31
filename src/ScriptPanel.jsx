@@ -2,20 +2,20 @@ import React, { useEffect, useState, useRef } from "react";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import { Play, Edit2, Maximize2, Copy, Trash2, ClipboardPaste } from "lucide-react";
 import { fetchWithLog } from "./utils/fetchWithLog";
-import { useToolCall } from "./ToolCallContext";
+import { useCallContext } from "./CallContext"; 
 import toast from "react-hot-toast";
 
 export default function ScriptPanel() {
   const [code, setCode] = useState(() => localStorage.getItem("scriptpanel_code") || "");
   const [result, setResult] = useState(() => localStorage.getItem("scriptpanel_result") || "");
   const [logs, setLogs] = useState(() => localStorage.getItem("scriptpanel_logs") || "");
+  const { registerToolHandler, connected } = useCallContext();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [resultFullOpen, setResultFullOpen] = useState(false);
   const [logsFullOpen, setLogsFullOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { registerToolHandler, connected } = useToolCall();
 
   useEffect(() => { localStorage.setItem("scriptpanel_code", code); }, [code]);
   useEffect(() => { localStorage.setItem("scriptpanel_result", result); }, [result]);

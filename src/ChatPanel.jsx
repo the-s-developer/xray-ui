@@ -1,14 +1,14 @@
 // src/ChatPanel.jsx
-import React, { useState, useRef, useEffect, useContext } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useLogContext } from "./LogContext";
-import { Play, Send, Edit2,Eye, Plus, RotateCw, Trash2, Copy, Bot,Terminal, SquareTerminal } from "lucide-react";
-
+import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import MarkdownMessage from "./MarkdownMessage";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import { ToolCallWithResult, ToolResultSummary } from "./ToolCallMessage";
 import { useSettings } from "./SettingsContext";
 import { fetchWithLog } from "./utils/fetchWithLog";
+import { useCallContext } from "./CallContext";
 import toast from "react-hot-toast";
 
 const MODELS = [
@@ -28,6 +28,39 @@ const MODELS = [
   { value: "devstral:24b", label: "mistral devstral:24b Q4_K_M (ollama)" },
   { value: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M", label: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M (ollama)" },
 ];
+const AgentState = {
+  IDLE: "idle",
+  GENERATING: "generating",
+  TOOL_CALLING: "tool_calling",
+  DONE: "done",
+  STOPPED: "stopped",
+  ERROR: "error",
+};
+
+// Status için UI mapping (ikon, renk, açıklama)
+const statusMap = {
+  [AgentState.IDLE]:     { icon: "⚪", color: "#ffe066", text: "Beklemede" },
+  [AgentState.GENERATING]: { icon: "🟡", color: "#fbbf24", text: "Yanıt üretiliyor" },
+  [AgentState.TOOL_CALLING]: { icon: "🔧", color: "#0ea5e9", text: "Araç çalışıyor" },
+  [AgentState.DONE]:     { icon: "🟢", color: "#22c55e", text: "Bitti" },
+  [AgentState.ERROR]:  { icon: "🔴", color: "#f87171", text: "Hata oluştu" },
+  [AgentState.STOPPED]: { icon: "🟠", color: "#f97316", text: "Durduruldu" },
+};
+
+function getStatusUI(state, tps) {
+  const s = statusMap[state] || statusMap[AgentState.IDLE];
+  console.log("getStatusUI", state, s.icon, tps);
+  return (
+    <>
+      <span style={{ fontSize: 18 }}>{s.icon}</span>
+      <span style={{ fontSize: 13, color: "white", fontWeight: 600 }}>
+        {typeof tps === "number" && !isNaN(tps) ? `${tps.toFixed(2)} t/s` : ""}
+      </span>
+    </>
+  );
+}
+
+
 
 const toolbarStyle = {
   display: "flex",
@@ -195,106 +228,126 @@ const bubbleIconOverlayStyle = {
   justifyContent: "center"
 };
 
+
+
 function getFlattenedChat(memory, showTools = true) {
   if (!memory?.messages) return [];
+
   const result = [];
-  let lastToolCall = null;
+  const pendingCalls = new Map();          // call_id  ->  tool_call meta
+
   for (const msg of memory.messages) {
-    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") {
-      if (msg.content !== null)
-        result.push({ type: "chat", ...msg });
+    // USER/SYSTEM
+    if (msg.role === "user" || msg.role === "system") {
+      if (msg.content != null) result.push({ type: "chat", ...msg });
+      continue;
+    }
+
+    // ASSISTANT
+    if (msg.role === "assistant") {
+      if (msg.content != null) result.push({ type: "chat", ...msg });
       if (showTools && msg.tool_calls) {
         for (const tc of msg.tool_calls) {
-          lastToolCall = { ...tc, parentRole: msg.role, id: msg.id };
+          pendingCalls.set(tc.id, { ...tc, parentRole: msg.role, id: msg.id });
         }
       }
-    } else if (showTools && msg.role === "tool") {
-      if (lastToolCall) {
-        result.push({
-          type: "tool_combo",
-          call: lastToolCall,
-          result: msg,
-        });
-        lastToolCall = null;
+      continue;
+    }
+
+    // TOOL (result)
+    if (showTools && msg.role === "tool") {
+      const callMeta = pendingCalls.get(msg.tool_call_id);
+      if (callMeta) {
+        // Eşleşti → birlikte göster
+        result.push({ type: "tool_combo", call: callMeta, result: msg });
+        pendingCalls.delete(msg.tool_call_id);
       } else {
+        // Eşleşemedi → bağımsız göster
         result.push({ type: "tool_result", ...msg });
       }
+      continue;
     }
   }
+  // Kalan yetim tool-calls'ı ister göster ister gösterme
+  // pendingCalls.forEach(call => result.push({ type:"tool_call_orphan", call }));
+
   return result;
 }
 
+
+
 export default function ChatPanel({ memory }) {
-   useEffect(() => {
-    console.log("ChatPanel:memory ->", memory);
-  }, [memory]);
-  
 
 
-  const { logs, setLogs } = useLogContext();
   const { settings, updateSettings } = useSettings();
   const { showImagePreview, showCodeLineNumbers, codeWrap, enterToSend, bubbleFontScale } = settings;
+  const { agentStatus } = useCallContext();
 
   const modelOptions = MODELS;
-
   const [defaultModel, setDefaultModel] = useState(() =>
     localStorage.getItem("selectedModel") ||
     (modelOptions.length ? modelOptions[0].value : "")
   );
-
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [fullScreenEditorOpen, setFullScreenEditorOpen] = useState(false);
+  const [editorInitialValue, setEditorInitialValue] = useState("");
+  const [editorBubbleId, setEditorBubbleId] = useState(null);
   const [assistantEditorOpen, setAssistantEditorOpen] = useState(false);
   const [assistantEditorInitialValue, setAssistantEditorInitialValue] = useState("");
+  const [insertAfterId, setInsertAfterId] = useState(null);
+  const [insertModalOpen, setInsertModalOpen] = useState(false);
 
-    // ChatPanel içinde, memory değiştikçe editörleri de kapat:
-    useEffect(() => {
-      setFullScreenEditorOpen(false);
-      setEditorBubbleId(null);
-    }, [memory]);
+  const chatEndRef = useRef();
+  const flattenedChat = getFlattenedChat(memory, true);
+const inputRef = useRef();
+
+  // Streaming
+  const [streamedAnswer, setStreamedAnswer] = useState("");
+  const [streaming, setStreaming] = useState(false);
+const [lastTps, setLastTps] = useState(0);
 
   useEffect(() => {
-    if (defaultModel) {
-      localStorage.setItem("selectedModel", defaultModel);
-    }
+    if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
   }, [defaultModel]);
 
   useEffect(() => {
     if (modelOptions.length && !modelOptions.some(m => m.value === defaultModel)) {
       setDefaultModel(modelOptions[0].value);
     }
-    // eslint-disable-next-line
   }, []);
 
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [fullScreenEditorOpen, setFullScreenEditorOpen] = useState(false);
-  const [editorInitialValue, setEditorInitialValue] = useState("");
-  const [editorBubbleId, setEditorBubbleId] = useState(null);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [flattenedChat, streamedAnswer]);
 
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [insertAfterId, setInsertAfterId] = useState(null);
-  const [insertModalOpen, setInsertModalOpen] = useState(false);
+  useEffect(() => {
+    setFullScreenEditorOpen(false);
+    setEditorBubbleId(null);
+    setAssistantEditorOpen(false);
+    setStreamedAnswer("");
+    setLoading(false);
+    setStreaming(false);
+  }, [memory]);
 
-  const chatEndRef = useRef();
-  const flattenedChat = getFlattenedChat(memory, true);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [flattenedChat]);
-    function onEditAssistantBubble(content) {
-      setAssistantEditorInitialValue(content ?? "");
-      setAssistantEditorOpen(true);
-    }
-
+  
+  function onEditBubble(content, id) {
+    setEditorInitialValue(content ?? "");
+    setEditorBubbleId(id);
+    setFullScreenEditorOpen(true);
+  }
+  function onEditAssistantBubble(content) {
+    setAssistantEditorInitialValue(content ?? "");
+    setAssistantEditorOpen(true);
+  }
   function getBubbleFontSize() {
-    // 16px baz alınır
     return `${Math.round(16 * bubbleFontScale)}px`;
   }
-
   function copyToClipboard(text, label = "Panoya Kopyalandı!") {
     if (!text) return;
     if (navigator?.clipboard) {
-      navigator.clipboard.writeText(text).then(() => {
-        toast.success(label); // Başarı mesajı
-
-      });
+      navigator.clipboard.writeText(text).then(() => toast.success(label));
     } else {
       const textarea = document.createElement("textarea");
       textarea.value = text;
@@ -333,14 +386,6 @@ export default function ChatPanel({ memory }) {
       setLoading(false);
     }
   }
-
-  function onEditBubble(content, id) {
-    console.log("onEditBubble called with content:", content, "and id:", id);
-    setEditorInitialValue(content ?? "");
-    setEditorBubbleId(id);
-    setFullScreenEditorOpen(true);
-  }
-
   async function onFullScreenEditorDone(value) {
     setFullScreenEditorOpen(false);
     if (editorBubbleId) {
@@ -357,17 +402,6 @@ export default function ChatPanel({ memory }) {
       }
       setEditorBubbleId(null);
     }
-  }
-
-  async function handleDeleteSelected() {
-    if (selectedIds.length === 0) return;
-    if (!window.confirm(`${selectedIds.length} mesajı ve ilgili tüm yanıtları silinsin mi?`)) return;
-    await fetchWithLog(`/api/chat/bulk_delete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: selectedIds }),
-    });
-    setSelectedIds([]);
   }
 
   function handleAssistantInsert(afterId) {
@@ -388,35 +422,152 @@ export default function ChatPanel({ memory }) {
     setInsertAfterId(null);
     setInsertModalOpen(false);
   }
-  const isIdSelected = (id) => selectedIds.includes(id);
+async function sendMessage(e) {
+  e.preventDefault();
+  if (!message.trim() || !defaultModel) return;
 
+  setLoading(true);
+  setStreaming(true);
+  setStreamedAnswer("");
+  setLastTps(null);
+
+  // --- Mesajı hemen temizle ve inputa fokus at ---
+  setMessage("");
+  inputRef.current?.focus();
+
+  try {
+    const resp = await fetch("/api/chat/ask_stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, model: defaultModel }),
+    });
+    if (!resp.body) throw new Error("Stream başlatılamadı!");
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      chunk.split(/\r?\n/).forEach((line) => {
+        if (!line.startsWith("data:")) return;
+        const jsonStr = line.slice(5).trim();
+        if (!jsonStr) return;
+
+        try {
+          const payload = JSON.parse(jsonStr);
+          switch (payload.type) {
+            case "partial_assistant":
+              setStreamedAnswer(payload.content);
+              break;
+            case "end":
+              setStreamedAnswer("");
+              setLastTps(payload.tps || null);
+              break;
+            default:
+              break;
+          }
+        } catch {
+          setStreamedAnswer((prev) => prev + jsonStr);
+        }
+      });
+    }
+  } catch (err) {
+    toast.error("Stream error: " + err.message);
+  } finally {
+    setStreaming(false);
+    setLoading(false);
+    // --- Yine de bir kez daha fokus ata (async flow için) ---
+    inputRef.current?.focus();
+  }
+}
+
+  async function handleStop() {
+    await fetch("/api/chat/stop", { method: "POST" });
+    setStreaming(false);
+    setLoading(false);
+  }
+
+  // --- RENDER ---
   return (
     <div style={styles.panel}>
-      {/* Toolbar */}
-      <div style={toolbarStyle}>
-        <select
-          style={selectStyle}
-          value={defaultModel}
-          onChange={e => {
-            setDefaultModel(e.target.value);
-            updateSettings({ defaultModel: e.target.value });
-          }}
-          title="Model seç"
-          disabled={!defaultModel || modelOptions.length === 0}
-        >
-          {modelOptions.map(m => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-          <button onClick={handleReplay} style={toolbarBtn} title="Replay / Yeniden Çalıştır" disabled={loading}>
-            <Play size={26} />
-          </button>
-          <button onClick={handleReset} style={toolbarBtnRed} title="Reset / Sıfırla" disabled={loading}>
-            <RotateCw size={26} />
-          </button>
-        </div>
-      </div>
+  
+<div style={toolbarStyle}>
+<div style={{
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginRight: 18,
+  minWidth: 110,
+  fontWeight: 600,
+  fontSize: 15,
+  color: statusMap[agentStatus.state]?.color ?? "#ffe066",
+  letterSpacing: 0.3,
+}}>
+  {getStatusUI(agentStatus.state, lastTps)}
+</div>
+  <select
+    style={selectStyle}
+    value={defaultModel}
+    onChange={e => {
+      setDefaultModel(e.target.value);
+      updateSettings({ defaultModel: e.target.value });
+    }}
+    title="Model seç"
+    disabled={!defaultModel || modelOptions.length === 0}
+  >
+    {modelOptions.map(m => (
+      <option key={m.value} value={m.value}>{m.label}</option>
+    ))}
+  </select>
+  <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+    {/* Stop Button */}
+    <button
+      style={{
+        ...toolbarBtn,
+        background:
+          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
+            ? "#b91c1c"
+            : "#232333",
+        color:
+          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
+            ? "#fff"
+            : "#bbb",
+        cursor:
+          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
+            ? "pointer"
+            : "not-allowed",
+        opacity:
+          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
+            ? 1
+            : 0.6,
+        marginRight: 9,
+        fontWeight: 700,
+        padding: 0,
+      }}
+      onClick={() => {
+        if ([AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)) {
+          handleStop();
+        }
+      }}
+      disabled={
+        ![AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
+      }
+      title="Durdur"
+    >
+      <StopCircle size={22} />
+    </button>
+    {/* Replay & Reset */}
+    <button onClick={handleReplay} style={toolbarBtn} title="Replay / Yeniden Çalıştır" disabled={loading}>
+      <Play size={26} />
+    </button>
+    <button onClick={handleReset} style={toolbarBtnRed} title="Reset / Sıfırla" disabled={loading}>
+      <RotateCw size={26} />
+    </button>
+  </div>
+</div>
       <div style={styles.chatContainer}>
         {flattenedChat.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", marginTop: 30 }}>
@@ -424,62 +575,39 @@ export default function ChatPanel({ memory }) {
           </div>
         )}
         {flattenedChat.map((item, idx) => {
-          const key = item.id;
-
+          const key = item.id || idx;
           if (item.type === "chat") {
-           if (item.role === "system") {
-                return (
-                  <div key={key} style={{ ...styles.systemBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
-                    <div style={iconOverlayStyle}>
-                      <button
-                        onClick={() => onEditBubble(item.content, item.id)}
-                        style={iconButtonStyle}
-                        title="Sistem mesajını düzenle"
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                      <MarkdownMessage
-                        content={item.content}
-                        showImagePreview={showImagePreview}
-                        codeLineNumbers={showCodeLineNumbers}
-                        codeWrap={codeWrap}
-                        fontSize={getBubbleFontSize()}
-                      />
-                    </div>
-                  </div>
-                );
-              }
-
-
-          if (item.role === "user") {
+            if (item.role === "system") {
               return (
-                <div
-                  key={item.id}
-                  style={{
-                    ...styles.userBubble,
-                    fontSize: getBubbleFontSize(),
-                    position: "relative"
-                  }}
-                >
-                <div style={bubbleIconOverlayStyle}>
-                  <Terminal size={19} style={{ color: "#99f6e4" }} />
-                </div>  
-                  {/* ICON OVERLAY */}
+                <div key={key} style={{ ...styles.systemBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={iconOverlayStyle}>
-                    <button
-                      onClick={() => copyToClipboard(item.content)}
-                      style={iconButtonStyle}
-                      title="Panoya kopyala"
-                    >
+                    <button onClick={() => onEditBubble(item.content, item.id)} style={iconButtonStyle} title="Sistem mesajını düzenle">
+                      <Edit2 size={15} />
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <MarkdownMessage
+                      content={item.content}
+                      showImagePreview={showImagePreview}
+                      codeLineNumbers={showCodeLineNumbers}
+                      codeWrap={codeWrap}
+                      fontSize={getBubbleFontSize()}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            if (item.role === "user") {
+              return (
+                <div key={item.id} style={{ ...styles.userBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
+                  <div style={bubbleIconOverlayStyle}>
+                    <Terminal size={19} style={{ color: "#99f6e4" }} />
+                  </div>
+                  <div style={iconOverlayStyle}>
+                    <button onClick={() => copyToClipboard(item.content)} style={iconButtonStyle} title="Panoya kopyala">
                       <Copy size={18} />
                     </button>
-                    <button
-                      onClick={() => onEditBubble(item.content, item.id)}
-                      style={iconButtonStyle}
-                      title="Düzenle"
-                    >
+                    <button onClick={() => onEditBubble(item.content, item.id)} style={iconButtonStyle} title="Düzenle">
                       <Edit2 size={16} />
                     </button>
                     <button
@@ -497,11 +625,7 @@ export default function ChatPanel({ memory }) {
                     >
                       <Trash2 size={16} />
                     </button>
-                    <button
-                      onClick={() => handleReplayUntil(item.id)}
-                      style={iconButtonStyle}
-                      title="Bu promptu tekrar çalıştır"
-                    >
+                    <button onClick={() => handleReplayUntil(item.id)} style={iconButtonStyle} title="Bu promptu tekrar çalıştır">
                       <Play size={16} />
                     </button>
                   </div>
@@ -515,52 +639,33 @@ export default function ChatPanel({ memory }) {
                 </div>
               );
             }
-
-
-          if (item.role === "assistant") {
-            return (
-              <div key={item.id} style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
-                {/* SOL ÜSTTE BOT */}
-                <div style={bubbleIconOverlayStyle}>
-                  <Bot size={19} style={{ color: "#99f6e4" }} />
-                </div>                
-                <div style={iconOverlayStyle}>
-                  <button
-                    onClick={() => copyToClipboard(item.content)}
-                    style={iconButtonStyle}
-                    title="Panoya kopyala"
-                  >
-                    <Copy size={18} />
-                  </button>
-                  {/* Edit yerine Eye/view */}
-                  <button
-                    onClick={() => onEditAssistantBubble(item.content)}
-                    style={iconButtonStyle}
-                    title="Cevabı tam ekran görüntüle"
-                  >
-                    <Eye size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleAssistantInsert(item.id)}
-                    style={iconButtonStyle}
-                    title="Bu cevabın sonrasına prompt ekle"
-                  >
-                    <Plus size={16} />
-                  </button>
+            if (item.role === "assistant") {
+              return (
+                <div key={item.id} style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
+                  <div style={bubbleIconOverlayStyle}>
+                    <Bot size={19} style={{ color: "#99f6e4" }} />
+                  </div>
+                  <div style={iconOverlayStyle}>
+                    <button onClick={() => copyToClipboard(item.content)} style={iconButtonStyle} title="Panoya kopyala">
+                      <Copy size={18} />
+                    </button>
+                    <button onClick={() => onEditAssistantBubble(item.content)} style={iconButtonStyle} title="Cevabı tam ekran görüntüle">
+                      <Eye size={16} />
+                    </button>
+                    <button onClick={() => handleAssistantInsert(item.id)} style={iconButtonStyle} title="Bu cevabın sonrasına prompt ekle">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  <MarkdownMessage
+                    content={item.content}
+                    showImagePreview={showImagePreview}
+                    codeLineNumbers={showCodeLineNumbers}
+                    codeWrap={codeWrap}
+                    fontSize={getBubbleFontSize()}
+                  />
                 </div>
-                <MarkdownMessage
-                  content={item.content}
-                  showImagePreview={showImagePreview}
-                  codeLineNumbers={showCodeLineNumbers}
-                  codeWrap={codeWrap}
-                  fontSize={getBubbleFontSize()}
-                />
-              </div>
-            );
-          }
-
-
-
+              );
+            }
           }
           if (item.type === "tool_combo") {
             return <ToolCallWithResult key={item.call?.id || idx} call={item.call} result={item.result} />;
@@ -570,27 +675,29 @@ export default function ChatPanel({ memory }) {
           }
           return null;
         })}
+
+        {/* Streaming (canlı) cevap balonu */}
+        {streamedAnswer && (
+          <div style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative", opacity: 0.8 }}>
+            <div style={bubbleIconOverlayStyle}>
+              <Bot size={19} style={{ color: "#99f6e4" }} />
+            </div>
+            <MarkdownMessage
+              content={streamedAnswer}
+              showImagePreview={showImagePreview}
+              codeLineNumbers={showCodeLineNumbers}
+              codeWrap={codeWrap}
+              fontSize={getBubbleFontSize()}
+            />
+          </div>
+        )}
+
         <div ref={chatEndRef} />
       </div>
       <div style={styles.inputWrapper}>
-          <form
-            style={styles.form}
-            onSubmit={async e => {
-              e.preventDefault();
-              if (!message.trim() || !defaultModel) return;
-              setLoading(true);
-              try {
-                await fetchWithLog("/api/chat/ask", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ message, model: defaultModel }), // client_id yok!
-                }, setLogs);
-              } catch (err) {}
-              setMessage("");
-              setLoading(false);
-            }}
-          >
+        <form style={styles.form} onSubmit={sendMessage}>
           <TextareaAutosize
+            ref={inputRef}
             style={styles.textarea}
             value={message}
             onChange={e => setMessage(e.target.value)}
@@ -605,16 +712,11 @@ export default function ChatPanel({ memory }) {
               }
             }}
           />
-          <button
-            type="submit"
-            style={styles.sendButton}
-            disabled={loading || !message.trim()}
-          >
+          <button type="submit" style={styles.sendButton} disabled={loading || !message.trim()}>
             <Send size={18} />
           </button>
         </form>
       </div>
-      {/* Tam ekran editörü: mesaj düzenleme */}
       <FullScreenCodeEditor
         open={fullScreenEditorOpen}
         initialValue={editorInitialValue}
@@ -623,7 +725,6 @@ export default function ChatPanel({ memory }) {
         onDone={onFullScreenEditorDone}
         onCancel={() => setFullScreenEditorOpen(false)}
       />
-      {/* Tam ekran ekleme editörü */}
       <FullScreenCodeEditor
         open={insertModalOpen}
         initialValue=""
@@ -644,7 +745,6 @@ export default function ChatPanel({ memory }) {
         onDone={() => setAssistantEditorOpen(false)}
         onCancel={() => setAssistantEditorOpen(false)}
       />
-
     </div>
   );
 }
