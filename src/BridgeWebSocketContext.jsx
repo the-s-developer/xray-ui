@@ -10,10 +10,7 @@ export function BridgeWebSocketProvider({ children }) {
 
   useEffect(() => {
     // WS URL ayarla
-    const WS_URL =
-      (window.location.protocol === "https:" ? "wss://" : "ws://") +
-      window.location.host +
-      "/ws/bridge";
+    const WS_URL =(window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host +"/ws/bridge";
     const ws = new window.WebSocket(WS_URL);
     wsRef.current = ws;
 

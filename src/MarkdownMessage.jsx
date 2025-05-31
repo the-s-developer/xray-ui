@@ -3,6 +3,8 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import { Copy } from "lucide-react";
+import toast from "react-hot-toast";
 import "highlight.js/styles/github-dark.css";
 
 // Markdown içinden görsel linkleri ayıkla (hem ![desc](url), hem [desc](url.jpg), hem düz jpg/png/gif)
@@ -36,7 +38,14 @@ function autoLinkify(text) {
     return part;
   });
 }
-
+function extractText(node) {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  // React element ise children’ına git
+  if (node.props && node.props.children) return extractText(node.props.children);
+  return "";
+}
 export default function MarkdownMessage({
   content,
   showImagePreview = false,
@@ -88,46 +97,79 @@ export default function MarkdownMessage({
       <ReactMarkdown
         rehypePlugins={[rehypeHighlight]}
         remarkPlugins={[remarkGfm]}
-        components={{
-          code({ inline, className, children, ...props }) {
-            if (inline) {
-              return (
-                <code
-                  style={{
-                    background: "#2a2d34",
-                    color: "#f0c674",
-                    borderRadius: 4,
-                    padding: "2px 6px",
-                    fontFamily: "Fira Mono, Menlo, monospace",
-                    fontSize: fontSize ? parseInt(fontSize) - 1 : 14
-                  }}
-                  {...props}
-                >
-                  {children}
-                </code>
-              );
-            }
-            // Kod bloğu
-            return (
-              <pre
-                style={{
-                  borderRadius: 8,
-                  padding: "14px 16px",
-                  margin: "8px 0",
-                  fontSize: fontSize ? parseInt(fontSize) - 1 : 15,
-                  fontFamily: "Fira Mono, Menlo, monospace",
-                  overflowX: codeWrap ? "auto" : "visible",
-                  lineHeight: 1.6,
-                  background: "#22242a",
-                  position: "relative"
-                }}
-              >
-                <code className={className} {...props}>
-                  {children}
-                </code>
-              </pre>
-            );
-          },
+ components={{
+  
+code({ inline, className, node, children, ...props }) {
+  // 1️⃣  ham kodu mümkünse node’dan al
+  const codeStr =
+    (node && node.children && node.children[0] && node.children[0].value)
+      ? node.children[0].value
+      : extractText(children);          // 🔸 artık “[object Object]” gelmez
+
+  // 🔹 INLINE -----------------------------------------------
+  if (inline) {
+    return (
+      <code
+        style={{
+          background: "#2a2d34",
+          color: "#f0c674",
+          borderRadius: 4,
+          padding: "2px 6px",
+          fontFamily: "Fira Mono, Menlo, monospace",
+          fontSize: fontSize ? parseInt(fontSize) - 1 : 14
+        }}
+        {...props}
+      >
+        {codeStr}
+      </code>
+    );
+  }
+
+  // 🔹 MULTILINE --------------------------------------------
+  return (
+    <pre
+      style={{
+        borderRadius: 8,
+        padding: "14px 16px",
+        margin: "8px 0",
+        fontSize: fontSize ? parseInt(fontSize) - 1 : 15,
+        fontFamily: "Fira Mono, Menlo, monospace",
+        overflowX: codeWrap ? "auto" : "visible",
+        lineHeight: 1.6,
+        background: "#22242a",
+        position: "relative"
+      }}
+    >
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(codeStr);
+          toast.success("Kod panoya kopyalandı!");
+        }}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 12,
+          background: "rgba(24,24,27,0.85)",
+          border: "none",
+          borderRadius: 7,
+          color: "#fafafa",
+          cursor: "pointer",
+          zIndex: 2,
+          padding: 4,
+          boxShadow: "0 2px 8px #0002",
+          opacity: 0.75
+        }}
+        title="Kodu panoya kopyala"
+        tabIndex={-1}
+      >
+        <Copy size={16} />
+      </button>
+      <code className={className} {...props}>
+        {codeStr}
+      </code>
+    </pre>
+  );
+},
           a({ ...props }) {
             return (
               <a

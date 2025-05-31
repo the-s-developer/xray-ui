@@ -106,7 +106,7 @@ export default function ScriptPanel() {
     <div style={{ padding: 24, color: "#111", minHeight: "100vh", background: "#f8fafc" }}>
       {/* HEADER */}
       <div style={{
-        fontWeight: 600, marginBottom: 14, fontSize: 20,
+        fontWeight: 600, marginBottom: 10, fontSize: 16,
         letterSpacing: 0.4, display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -120,18 +120,18 @@ export default function ScriptPanel() {
         </div>
       </div>
 
-      {/* Kod Blok - ÜSTTE ve ALTA TAM DOĞRU KONUMDA BUTONLAR */}
+      {/* Kod Blok*/}
       <div style={{
         background: "#18181b",
         color: "#fafafa",
         borderRadius: 8,
         padding: 0,
         fontFamily: "Fira Mono, Menlo, monospace",
-        fontSize: 15,
+        fontSize: 11,
         marginBottom: 12,
         minHeight: 160,
         maxHeight: 340,
-        overflow: "auto",
+        overflow: "hidden",
         boxShadow: "0 2px 8px #0001",
         position: "relative"
       }}>
@@ -186,10 +186,32 @@ export default function ScriptPanel() {
           </button>
         </div>
         {/* KOD */}
-        <pre style={{
-          margin: 0, whiteSpace: "pre", padding: 16, minHeight: 140
-        }}>{code}</pre>
-        {/* PLAY BUTONU SAĞ ALTA */}
+       <div
+          style={{
+            position: "relative",
+            minHeight: 140,
+            maxHeight: 340,
+            height: 500, // Sabit bir yükseklik, istersen farklı verebilirsin
+            background: "#18181b",
+            color: "#fafafa",
+            overflow: "hidden", // Dışta scroll yok
+          }}
+        >
+          <pre
+            style={{
+              margin: 0,
+              whiteSpace: "pre",
+              padding: 16,
+              minHeight: "100%",
+              maxHeight: "100%",
+              height: "100%",
+              overflowY: "auto", // <--- asıl scroll burada!
+              overflowX: "auto",
+            }}
+          >
+            {code}
+          </pre>
+        </div>
         <button
           style={{
             position: "absolute", right: 18, bottom: 18,

@@ -9,6 +9,7 @@ import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import { ToolCallWithResult, ToolResultSummary } from "./ToolCallMessage";
 import { useSettings } from "./SettingsContext";
 import { fetchWithLog } from "./utils/fetchWithLog";
+import toast from "react-hot-toast";
 
 const MODELS = [
   { value: "gpt-4.1-nano", label: "gpt-4.1-nano 0.4$ (1M)" },
@@ -21,6 +22,11 @@ const MODELS = [
   { value: "o3-mini", label: "o3-mini 4.4$ (8K)" },
   { value: "o1", label: "o1 60$ (16K)" },
   { value: "o1-mini", label: "o1-mini 4.4$ (8K)" },
+  { value: "qwen3:14b", label: "qwen3 14b (ollama)" },
+  { value: "qwen3:8b", label: "qwen3 8b (ollama)" },
+  { value: "devstral:24b-small-2505-q8_0", label: "mistral devstral:24b-small-2505-q8_0 (ollama)" },
+  { value: "devstral:24b", label: "mistral devstral:24b Q4_K_M (ollama)" },
+  { value: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M", label: "myaniu/qwen2.5-1m:14b-instruct-q6_K_M (ollama)" },
 ];
 
 const toolbarStyle = {
@@ -190,7 +196,6 @@ const bubbleIconOverlayStyle = {
 };
 
 function getFlattenedChat(memory, showTools = true) {
-  console.log("flattendd", memory);
   if (!memory?.messages) return [];
   const result = [];
   let lastToolCall = null;
@@ -221,7 +226,7 @@ function getFlattenedChat(memory, showTools = true) {
 
 export default function ChatPanel({ memory }) {
    useEffect(() => {
-    console.log("ChatPanel useEffect-> memory:", memory);
+    console.log("ChatPanel:memory ->", memory);
   }, [memory]);
   
 
@@ -283,9 +288,13 @@ export default function ChatPanel({ memory }) {
     return `${Math.round(16 * bubbleFontScale)}px`;
   }
 
-  function copyToClipboard(text) {
+  function copyToClipboard(text, label = "Panoya Kopyalandı!") {
+    if (!text) return;
     if (navigator?.clipboard) {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(text).then(() => {
+        toast.success(label); // Başarı mesajı
+
+      });
     } else {
       const textarea = document.createElement("textarea");
       textarea.value = text;
@@ -293,6 +302,7 @@ export default function ChatPanel({ memory }) {
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
+      toast.success(label);
     }
   }
 
