@@ -5,7 +5,7 @@ import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Squ
 import TextareaAutosize from "react-textarea-autosize";
 import MarkdownMessage from "./MarkdownMessage";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
-import { ToolCallWithResult, ToolResultSummary } from "./ToolCallMessage";
+import { ToolCallWithResult } from "./ToolCallMessage";
 import { useSettings } from "./SettingsContext";
 import { fetchWithLog } from "./utils/fetchWithLog";
 import { useCallContext } from "./CallContext";
@@ -231,7 +231,7 @@ function getFlattenedChat(memory, showTools = true) {
       if (msg.content != null) result.push({ type: "chat", ...msg });
       if (showTools && msg.tool_calls) {
         for (const tc of msg.tool_calls) {
-          pendingCalls.set(tc.id, { ...tc, parentRole: msg.role, id: msg.id });
+          pendingCalls.set(tc.id, { ...tc, parentRole: msg.role, id: msg["meta"]["id"] });
         }
       }
       continue;
@@ -341,6 +341,7 @@ useEffect(() => {
 }, [defaultModel]);
   
   function onEditBubble(content, id) {
+    console.log(`onEditBubble: ${content}, ${id}`); 
     setEditorInitialValue(content ?? "");
     setEditorBubbleId(id);
     setFullScreenEditorOpen(true);
@@ -418,6 +419,7 @@ async function handleReset() {
   }
 
   function handleAssistantInsert(afterId) {
+    console.log("handleAssistantInsert", afterId);
     setInsertAfterId(afterId);
     setInsertModalOpen(true);
   }
@@ -579,13 +581,13 @@ async function sendMessage(e) {
           </div>
         )}
         {flattenedChat.map((item, idx) => {
-          const key = item.id || idx;
+          const key = item.meta?.id || idx;
           if (item.type === "chat") {
             if (item.role === "system") {
               return (
                 <div key={key} style={{ ...styles.systemBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={iconOverlayStyle}>
-                    <button onClick={() => onEditBubble(item.content, item.id)} style={iconButtonStyle} title="Sistem mesajını düzenle">
+                    <button onClick={() => onEditBubble(item.content, item["meta"]["id"])} style={iconButtonStyle} title="Sistem mesajını düzenle">
                       <Edit2 size={15} />
                     </button>
                   </div>
@@ -603,7 +605,7 @@ async function sendMessage(e) {
             }
             if (item.role === "user") {
               return (
-                <div key={item.id} style={{ ...styles.userBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
+                <div key={item["meta"]["id"]} style={{ ...styles.userBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={bubbleIconOverlayStyle}>
                     <Terminal size={19} style={{ color: "#99f6e4" }} />
                   </div>
@@ -611,25 +613,25 @@ async function sendMessage(e) {
                     <button onClick={() => copyToClipboard(item.content)} style={iconButtonStyle} title="Panoya kopyala">
                       <Copy size={18} />
                     </button>
-                    <button onClick={() => onEditBubble(item.content, item.id)} style={iconButtonStyle} title="Düzenle">
+                    <button onClick={() => onEditBubble(item.content, item["meta"]["id"])} style={iconButtonStyle} title="Düzenle">
                       <Edit2 size={16} />
                     </button>
                     <button
                       onClick={async () => {
-                        if (window.confirm("Bu mesajı silmek istediğinizden emin misiniz?")) {
+                        //if (window.confirm("Bu mesajı silmek istediğinizden emin misiniz?")) {
                           await fetchWithLog(`/api/chat/bulk_delete`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ ids: [item.id] }),
+                            body: JSON.stringify({ ids: [item["meta"]["id"]] }),
                           });
-                        }
+                        //}
                       }}
                       style={iconButtonStyle}
                       title="Mesajı sil"
                     >
                       <Trash2 size={16} />
                     </button>
-                    <button onClick={() => handleReplayUntil(item.id)} style={iconButtonStyle} title="Bu promptu tekrar çalıştır">
+                    <button onClick={() => handleReplayUntil(item["meta"]["id"])} style={iconButtonStyle} title="Bu promptu tekrar çalıştır">
                       <Play size={16} />
                     </button>
                   </div>
@@ -645,7 +647,7 @@ async function sendMessage(e) {
             }
             if (item.role === "assistant") {
               return (
-                <div key={item.id} style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
+                <div key={item["meta"]["id"]} style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={bubbleIconOverlayStyle}>
                     <Bot size={19} style={{ color: "#99f6e4" }} />
                   </div>
@@ -656,7 +658,7 @@ async function sendMessage(e) {
                     <button onClick={() => onEditAssistantBubble(item.content)} style={iconButtonStyle} title="Cevabı tam ekran görüntüle">
                       <Eye size={16} />
                     </button>
-                    <button onClick={() => handleAssistantInsert(item.id)} style={iconButtonStyle} title="Bu cevabın sonrasına prompt ekle">
+                    <button onClick={() => handleAssistantInsert(item["meta"]["id"])} style={iconButtonStyle} title="Bu cevabın sonrasına prompt ekle">
                       <Plus size={16} />
                     </button>
                   </div>
@@ -673,9 +675,6 @@ async function sendMessage(e) {
           }
           if (item.type === "tool_combo") {
             return <ToolCallWithResult key={item.call?.id || idx} call={item.call} result={item.result} />;
-          }
-          if (item.type === "tool_result") {
-            return <ToolResultSummary key={item.tool_call_id || idx} tool_call_id={item.tool_call_id} content={item.content} />;
           }
           return null;
         })}
