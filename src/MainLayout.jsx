@@ -35,11 +35,12 @@ export default function MainLayout() {
   function renderAllPanels() {
     return (
       <>
-        <div style={{ display: selected === "project" ? "block" : "none", height: "100%", width: "100%" }}>
-          <ProjectPanel />
-        </div>
+
         <div style={{ display: selected === "chat" ? "block" : "none", height: "100%", width: "100%" }}>
           <ChatPanel memory={memory} agentStatus={agentStatus} />
+        </div>
+        <div style={{ display: selected === "project" ? "block" : "none", height: "100%", width: "100%" }}>
+          <ProjectPanel />
         </div>
         <div style={{ display: selected === "tools" ? "block" : "none", height: "100%", width: "100%" }}>
           <ToolsPanel toolsVersion={toolsVersion} />

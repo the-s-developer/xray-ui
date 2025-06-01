@@ -31,8 +31,8 @@ const iconButtonStyle = (active) => ({
 });
 
 const panels = [
-  { key: "project", icon: <FileText size={22} />, label: "Projects" },
   { key: "chat", icon: <MessageSquare size={22} />, label: "Chat" },
+  { key: "project", icon: <FileText size={22} />, label: "Projects" },
   { key: "tools", icon: <Wrench size={22} />, label: "Tools" },
   { key: "settings", icon: <Settings size={22} />, label: "Settings" },
 ];

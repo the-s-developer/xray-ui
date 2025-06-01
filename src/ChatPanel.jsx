@@ -289,6 +289,8 @@ const inputRef = useRef();
   const [streamedAnswer, setStreamedAnswer] = useState("");
   const [streaming, setStreaming] = useState(false);
 const [lastTps, setLastTps] = useState(0);
+const jobActive = streaming ||
+  [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state);
 
   useEffect(() => {
     if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
@@ -385,13 +387,18 @@ useEffect(() => {
     });
     setLoading(false);
   }
-  async function handleReset() {
-    if (window.confirm("Konuşma hafızası tamamen sıfırlansın mı?")) {
-      setLoading(true);
-      await fetchWithLog('/api/chat/reset', { method: 'POST' });
-      setLoading(false);
-    }
+async function handleReset() {
+  if (window.confirm("Konuşma hafızası ve aktif işler tamamen sıfırlansın mı?")) {
+    setLoading(true);
+    await fetchWithLog('/api/chat/restart', { method: 'POST' });
+    setLoading(false);
+    setStreamedAnswer("");
+    setStreaming(false);
+    setLastTps(0);
+    // Diğer tüm state'leri de sıfırlayabilirsin.
   }
+}
+
   async function onFullScreenEditorDone(value) {
     setFullScreenEditorOpen(false);
     if (editorBubbleId) {
@@ -428,6 +435,7 @@ useEffect(() => {
     setInsertAfterId(null);
     setInsertModalOpen(false);
   }
+
 async function sendMessage(e) {
   e.preventDefault();
   if (!message.trim() || !defaultModel) return;
@@ -447,6 +455,14 @@ async function sendMessage(e) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, model: defaultModel }),
     });
+
+    if (resp.status === 409) {
+      toast.error("Zaten bir işlem çalışıyor! Lütfen bitmesini veya durdurulmasını bekleyin.");
+      setStreaming(false);
+      setLoading(false);
+      return;
+    }
+
     if (!resp.body) throw new Error("Stream başlatılamadı!");
 
     const reader = resp.body.getReader();
@@ -490,6 +506,7 @@ async function sendMessage(e) {
   }
 }
 
+
   async function handleStop() {
     await fetch("/api/chat/stop", { method: "POST" });
     setStreaming(false);
@@ -529,46 +546,27 @@ async function sendMessage(e) {
   ))}
 </select>
   <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-    {/* Stop Button */}
-    <button
-      style={{
-        ...toolbarBtn,
-        background:
-          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
-            ? "#b91c1c"
-            : "#232333",
-        color:
-          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
-            ? "#fff"
-            : "#bbb",
-        cursor:
-          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
-            ? "pointer"
-            : "not-allowed",
-        opacity:
-          [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
-            ? 1
-            : 0.6,
-        marginRight: 9,
-        fontWeight: 700,
-        padding: 0,
-      }}
-      onClick={() => {
-        if ([AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)) {
-          handleStop();
+   
+   <button
+        style={
+          jobActive
+            ? { ...toolbarBtnRed, marginRight: 9 }
+            : toolbarBtn
         }
-      }}
-      disabled={
-        ![AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state)
-      }
-      title="Durdur"
-    >
-      <StopCircle size={22} />
-    </button>
-    {/* Replay & Reset */}
-    <button onClick={handleReplay} style={toolbarBtn} title="Replay / Yeniden Çalıştır" disabled={loading}>
-      <Play size={26} />
-    </button>
+        onClick={
+          jobActive
+            ? handleStop // Aktif job varken stop fonksiyonu
+            : handleReplay // Normalde replay fonksiyonu
+        }
+        title={jobActive ? "Durdur" : "Replay / Yeniden Çalıştır"}
+        disabled={loading}
+      >
+        {jobActive ? (
+          <StopCircle size={26} />
+        ) : (
+          <Play size={26} />
+        )}
+      </button>
     <button onClick={handleReset} style={toolbarBtnRed} title="Reset / Sıfırla" disabled={loading}>
       <RotateCw size={26} />
     </button>
@@ -718,9 +716,33 @@ async function sendMessage(e) {
               }
             }}
           />
-          <button type="submit" style={styles.sendButton} disabled={loading || !message.trim()}>
-            <Send size={18} />
-          </button>
+
+          {!jobActive ? (
+            <button
+              type="submit"
+              style={styles.sendButton}
+              disabled={loading || !message.trim()}
+              title="Gönder"
+            >
+              <Send size={18} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={{
+                ...styles.sendButton,
+                background: "#b91c1c",
+                color: "#fff",
+                fontWeight: 700
+              }}
+              onClick={handleStop}
+              title="Durdur"
+            >
+              <StopCircle size={18} />
+            </button>
+          )}
+
+
         </form>
       </div>
       <FullScreenCodeEditor
