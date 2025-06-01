@@ -19,6 +19,7 @@ function toMarkdownContent(val) {
 
 
 export function ToolCallWithResult({ call, result }) {
+  console.log("ToolCallWithResult", { call, result });
   const [modalOpen, setModalOpen] = useState(false);
 
   // Argüman özeti

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Edit2, Save, X, Upload, Download, Copy, Maximize2, Play, Trash2, RotateCw, ClipboardPaste,List
+  Plus, Edit2, Save, X, Upload, Download, Copy, Maximize2, Play, Trash2, RotateCw, ClipboardPaste, List
 } from "lucide-react";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import toast from "react-hot-toast";
@@ -118,42 +118,43 @@ export default function ProjectPanel() {
   const [execModalOpen, setExecModalOpen] = useState(false);
 
 
+
   // Projeleri yükle
   useEffect(() => {
     fetchProjects().then(setProjects);
   }, []);
 
   // Proje seçilince script ve execution çek
-useEffect(() => {
-  if (!selected) {
-    setScripts([]);
-    setExecutions([]); // Array olarak sıfırla
-    setSelectedScript(null);
-    setSelectedExecution(null);
-    return;
-  }
-  fetchScripts(selected.projectId).then(scs => {
-    setScripts(scs);
-    setSelectedScript(scs[0] || null);
-  });
-  fetchExecutions(selected.projectId).then(res => {
-    setExecutions(res.executions || res || []); // Sadece array!
-  });
-}, [selected]);
+  useEffect(() => {
+    if (!selected) {
+      setScripts([]);
+      setExecutions([]); // Array olarak sıfırla
+      setSelectedScript(null);
+      setSelectedExecution(null);
+      return;
+    }
+    fetchScripts(selected.projectId).then(scs => {
+      setScripts(scs);
+      setSelectedScript(scs[0] || null);
+    });
+    fetchExecutions(selected.projectId).then(res => {
+      setExecutions(res.executions || res || []); // Sadece array!
+    });
+  }, [selected]);
 
   // Script değişince executionları filtrele
-useEffect(() => {
-  // Emin olmak için array olduğundan emin ol
-  const arr = Array.isArray(executions) ? executions : (executions.executions || []);
-  if (!selectedScript) {
-    setFilteredExecutions([]);
-    setSelectedExecution(null);
-    return;
-  }
-  const ex = arr.filter(e => e.scriptId === selectedScript.scriptId);
-  setFilteredExecutions(ex);
-  setSelectedExecution(ex[ex.length - 1] || null);
-}, [selectedScript, executions]);
+  useEffect(() => {
+    // Emin olmak için array olduğundan emin ol
+    const arr = Array.isArray(executions) ? executions : (executions.executions || []);
+    if (!selectedScript) {
+      setFilteredExecutions([]);
+      setSelectedExecution(null);
+      return;
+    }
+    const ex = arr.filter(e => e.scriptId === selectedScript.scriptId);
+    setFilteredExecutions(ex);
+    setSelectedExecution(ex[ex.length - 1] || null);
+  }, [selectedScript, executions]);
 
   // Edit script code sync
   useEffect(() => {
@@ -186,6 +187,19 @@ useEffect(() => {
         });
     }
   }, [selected]);
+
+
+  const sortedExecutions = [...filteredExecutions].sort(
+    (a, b) => new Date(b.startTime) - new Date(a.startTime)
+  );
+  const lastExecutions = sortedExecutions.slice(0, 10);
+  useEffect(() => {
+    if (lastExecutions.length > 0) {
+      setSelectedExecution(lastExecutions[0]);
+    } else {
+      setSelectedExecution(null);
+    }
+  }, [lastExecutions.length, selectedScript?.scriptId]);
 
   function copyToClipboard(text, label = "Kopyalandı!") {
     if (!text) return;
@@ -248,9 +262,9 @@ useEffect(() => {
       const executionsData = await executionsRes.json();
       setExecutions(executionsData);
 
-const currentScriptExecutions = (executionsData.executions || []).filter(
-  ex => ex.scriptId === selectedScript.scriptId
-);
+      const currentScriptExecutions = (executionsData.executions || []).filter(
+        ex => ex.scriptId === selectedScript.scriptId
+      );
 
       setFilteredExecutions(currentScriptExecutions);
       setSelectedExecution(currentScriptExecutions[0] || null);
@@ -409,7 +423,7 @@ const currentScriptExecutions = (executionsData.executions || []).filter(
     setEditMode(true);
   }
 
-  
+
   function handleCancel() {
     setEditMode(false);
     if (!selected) setForm({ projectName: "", projectDescription: "" });
@@ -418,13 +432,9 @@ const currentScriptExecutions = (executionsData.executions || []).filter(
     (p.projectName || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const sortedExecutions = [...filteredExecutions].sort(
-  (a, b) => new Date(b.startTime) - new Date(a.startTime)
-);
-const lastExecutions = sortedExecutions.slice(0, 10);
 
   return (
-      <div style={{ minHeight: "100vh", background: "#f4f5fa" }}>
+    <div style={{ minHeight: "100vh", background: "#f4f5fa" }}>
       {/* HEADER BAR */}
       <div style={{
         background: "#fff", padding: 16, borderBottom: "1.5px solid #e5e7eb", position: "relative", zIndex: 10
@@ -831,33 +841,33 @@ const lastExecutions = sortedExecutions.slice(0, 10);
 
             {/* Çalıştırma geçmişi ve detay paneli */}
             <div>
-       <div>
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                margin: "20px 0 2px 0"
-              }}>
-                <b style={{ fontSize: 17, color: "#444" }}>Son Çalıştırmalar</b>
-                <button style={{
-                  border: "none", background: "#e0e7ef", color: "#444", borderRadius: 7, padding: "4px 14px", cursor: "pointer"
-                }} onClick={() => setExecModalOpen(true)}>
-                  <List size={18} style={{ marginRight: 6, marginBottom: -2 }} />
-                </button>
-              </div>
-              {lastExecutions.map(ex => (
-                <div
-                  key={ex.executionId + ex.startTime}
-                  onClick={() => setSelectedExecution(ex)}
-                  style={{
-                    padding: "8px 18px",
-                    borderBottom: "1px solid #e5e7eb",
-                    background: selectedExecution?.executionId === ex.executionId && selectedExecution?.startTime === ex.startTime ? "#e0e7ff" : "transparent",
-                    cursor: "pointer"
-                  }}
-                >
-                  <b>{ex.status}</b> <span style={{ color: "#64748b" }}>{formatDate(ex.startTime)}</span> v{ex.scriptVersion}
+              <div>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  margin: "20px 0 2px 0"
+                }}>
+                  <b style={{ fontSize: 17, color: "#444" }}>Son Çalıştırmalar</b>
+                  <button style={{
+                    border: "none", background: "#e0e7ef", color: "#444", borderRadius: 7, padding: "4px 14px", cursor: "pointer"
+                  }} onClick={() => setExecModalOpen(true)}>
+                    <List size={18} style={{ marginRight: 6, marginBottom: -2 }} />
+                  </button>
                 </div>
-              ))}
-            </div>
+                {lastExecutions.map(ex => (
+                  <div
+                    key={ex.executionId + ex.startTime}
+                    onClick={() => setSelectedExecution(ex)}
+                    style={{
+                      padding: "8px 18px",
+                      borderBottom: "1px solid #e5e7eb",
+                      background: selectedExecution?.executionId === ex.executionId && selectedExecution?.startTime === ex.startTime ? "#e0e7ff" : "transparent",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <b>{ex.status}</b> <span style={{ color: "#64748b" }}>{formatDate(ex.startTime)}</span> v{ex.scriptVersion}
+                  </div>
+                ))}
+              </div>
               {/* Seçili çalıştırmanın detay paneli */}
               {selectedScript && selectedExecution && (
                 <div style={{
@@ -950,10 +960,10 @@ const lastExecutions = sortedExecutions.slice(0, 10);
                           marginBottom: 0,
                           whiteSpace: "pre-wrap"
                         }}>
-                            {typeof selectedExecution.output === "string"
-                              ? selectedExecution.output
-                              : JSON.stringify(selectedExecution.output, null, 2)}                        
-                      </pre>
+                          {typeof selectedExecution.output === "string"
+                            ? selectedExecution.output
+                            : JSON.stringify(selectedExecution.output, null, 2)}
+                        </pre>
                       </div>
                     )}
                     {/* Logs Tabı */}
@@ -1034,7 +1044,7 @@ const lastExecutions = sortedExecutions.slice(0, 10);
                   />
 
                 </div>
-                
+
               )}
 
             </div>
@@ -1114,13 +1124,13 @@ const lastExecutions = sortedExecutions.slice(0, 10);
           </div>
         </div>
       )}
-          <ExecutionHistoryModal
-      open={execModalOpen}
-      onClose={() => setExecModalOpen(false)}
-      projectId={selected?.projectId}
-      scriptId={selectedScript?.scriptId}
-      scripts={scripts}
-    />
+      <ExecutionHistoryModal
+        open={execModalOpen}
+        onClose={() => setExecModalOpen(false)}
+        projectId={selected?.projectId}
+        scriptId={selectedScript?.scriptId}
+        scripts={scripts}
+      />
     </div>
   );
 }
