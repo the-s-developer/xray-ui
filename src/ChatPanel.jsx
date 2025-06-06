@@ -1,7 +1,7 @@
 // src/ChatPanel.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { useLogContext } from "./LogContext";
-import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle } from "lucide-react";
+import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle , Scissors,Eraser} from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import MarkdownMessage from "./MarkdownMessage";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
@@ -618,6 +618,22 @@ async function sendMessage(e) {
                     </button>
                     <button
                       onClick={async () => {
+                        if (window.confirm("Bu mesajı ve sonraki tüm mesajları silmek istiyor musunuz?")) {
+                          await fetchWithLog(`/api/chat/delete_after/${item["meta"]["id"]}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                          });
+                        }
+                      }}
+                      style={iconButtonStyle}
+                      title="Bu prompt ve sonrasını sil"
+                    >
+                      <Trash2 size={16}  />
+                      {/* istersen farklı bir ikon da koyabilirsin */}
+                    </button>
+
+                    <button
+                      onClick={async () => {
                         //if (window.confirm("Bu mesajı silmek istediğinizden emin misiniz?")) {
                           await fetchWithLog(`/api/chat/bulk_delete`, {
                             method: "POST",
@@ -629,8 +645,9 @@ async function sendMessage(e) {
                       style={iconButtonStyle}
                       title="Mesajı sil"
                     >
-                      <Trash2 size={16} />
+                      <Scissors size={16} />
                     </button>
+                    
                     <button onClick={() => handleReplayUntil(item["meta"]["id"])} style={iconButtonStyle} title="Bu promptu tekrar çalıştır">
                       <Play size={16} />
                     </button>
