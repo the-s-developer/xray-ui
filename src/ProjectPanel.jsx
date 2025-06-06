@@ -5,6 +5,7 @@ import {
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
 import toast from "react-hot-toast";
 import { fetchWithLog } from "./utils/fetchWithLog";
+import PromptDetailsModal from "./PromptDetailsModal";
 
 const PAGE_SIZE = 10;
 
@@ -117,6 +118,7 @@ export default function ProjectPanel() {
 
   const [execModalOpen, setExecModalOpen] = useState(false);
 
+  const [promptDetailsOpen, setPromptDetailsOpen] = useState(false);
 
 
   // Projeleri yükle
@@ -217,6 +219,8 @@ export default function ProjectPanel() {
       toast.success(label);
     }
   }
+
+
 
   async function handleDeleteProject() {
     if (!selected || !selected.projectId) return;
@@ -614,62 +618,64 @@ export default function ProjectPanel() {
             </div>
             {/* Promptlar gösterimi */}
             {selected.prompts?.length > 0 && (
-              <div style={{
-                background: "#f8fafc",
-                border: "1.5px solid #e5e7eb",
-                borderRadius: 16,
-                padding: "24px 24px 10px 24px",
-                marginBottom: 28,
-                marginTop: 8,
-                boxShadow: "0 2px 12px #0ea5e933",
-                maxHeight: 250,
-                overflowY: "auto",
-              }}>
-                {selected.prompts.map((pr, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 8,
-                      marginBottom: 18,
-                      borderRadius: 10,
-                      background: pr.type === "system" ? "#fef9c3" : "#ecfeff",
-                      border: pr.type === "system"
-                        ? "1.2px solid #fde047"
-                        : "1.2px solid #22d3ee",
-                      padding: "10px 16px",
-                      boxShadow: pr.type === "system"
-                        ? "0 2px 8px #fde04733"
-                        : "0 2px 8px #22d3ee33",
-                    }}
-                  >
-                    <span
-                      style={{
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1.5px solid #e5e7eb",
+                    borderRadius: 16,
+                    padding: "18px 20px",
+                    marginBottom: 28,
+                    marginTop: 8,
+                    boxShadow: "0 2px 12px #0ea5e933",
+                    maxHeight: 90,
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    position: "relative"
+                  }}
+                  onClick={() => setPromptDetailsOpen(true)}
+                  title="Tümünü Gör"
+                >
+                  <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+                    {selected.prompts.slice(0, 5).map((pr, i) => (
+                      <span key={i} style={{
                         fontWeight: 700,
-                        color: pr.type === "system" ? "#d97706" : "#0ea5e9",
-                        fontSize: 15,
-                        minWidth: 66,
-                        textTransform: "uppercase",
-                        letterSpacing: ".02em",
-                        marginTop: 2,
-                      }}
-                    >
-                      {pr.type}
-                    </span>
-                    <span
-                      style={{
-                        color: "#1e293b",
-                        fontSize: 16,
-                        whiteSpace: "pre-wrap"
-                      }}
-                    >
-                      {pr.content}
-                    </span>
+                        fontSize: 14,
+                        borderRadius: 6,
+                        padding: "4px 12px",
+                        background:
+                          pr.role === "system" ? "#fde047" :
+                          pr.role === "user" ? "#6366f1" :
+                          pr.role === "assistant" ? "#1e293b" : "#36c6f1",
+                        color:
+                          pr.role === "system" ? "#78350f" :
+                          pr.role === "user" ? "#fff" :
+                          pr.role === "assistant" ? "#fff" : "#e0f2fe",
+                        border:
+                          pr.role === "system" ? "1px solid #fbbf24" :
+                          pr.role === "user" ? "1.5px solid #6366f1" :
+                          pr.role === "assistant" ? "1.5px solid #64748b" : "1.5px solid #36c6f1",
+                        marginRight: 6,
+                        maxWidth: 180,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}>
+                        <span style={{ fontWeight: 400, opacity: 0.85, marginLeft: 4 }}>
+                          {(pr.content || "").replace(/\n/g, " ").slice(0, 28)}
+                          {(pr.content || "").length > 28 && "..."}
+
+                        </span>
+                      </span>
+                    ))}
+                    {selected.prompts.length > 5 && (
+                      <span style={{
+                        background: "#e0e7ef", color: "#334155", fontWeight: 600, fontSize: 14, borderRadius: 6, padding: "4px 14px"
+                      }}>+{selected.prompts.length - 5} daha</span>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+
             {/* Script versiyonu seç */}
             <div style={{
               marginBottom: 24,
@@ -735,86 +741,94 @@ export default function ProjectPanel() {
               <div style={{
                 marginTop: 0, marginBottom: 16, position: "relative"
               }}>
-                <div style={{
-                  background: "#18181b",
-                  color: "#fafafa",
-                  borderRadius: 20,
-                  padding: 26,
-                  fontFamily: "Fira Mono, Menlo, monospace",
-                  fontSize: 17,
-                  marginBottom: 8,
-                  minHeight: 140,
-                  maxHeight: 340,
-                  overflow: "auto",
-                  boxShadow: "0 2px 8px #0001",
-                  position: "relative"
-                }}>
-                  {/* SAĞ ÜST İKONLAR */}
-                  <div style={{
-                    position: "absolute", top: 16, right: 18,
-                    display: "flex", gap: 18, zIndex: 5
-                  }}>
-                    {/* Düzenle */}
-                    <button
-                      onClick={() => { setEditScriptOpen(true); setEditScriptCode(selectedScript.code); }}
-                      title="Kodu Düzenle"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#fafafa",
-                        fontSize: 19,
-                        padding: 0,
-                        cursor: "pointer"
-                      }}>
-                      <Edit2 size={20} />
-                    </button>
-                    {/* Kopyala */}
-                    <button
-                      onClick={() => copyToClipboard(selectedScript.code, "panoya kopyalandı!")}
-                      title="Kodu panoya kopyala"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#fde047",
-                        fontSize: 19,
-                        padding: 0,
-                        cursor: "pointer"
-                      }}>
-                      <Copy size={20} />
-                    </button>
-                  </div>
-                  <pre style={{
-                    margin: 0,
-                    whiteSpace: "pre"
-                  }}>{selectedScript.code}</pre>
-                  {/* Çalıştırma butonu */}
-                  <button
-                    onClick={handleRunSelectedScript}
-                    title="Scripti Çalıştır"
-                    style={{
-                      position: "absolute",
-                      right: 32,
-                      bottom: 24,
-                      background: "#6366f1",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "50%",
-                      width: 54,
-                      height: 54,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 23,
-                      cursor: runLoading ? "not-allowed" : "pointer",
-                      opacity: runLoading ? 0.7 : 1,
-                      boxShadow: "0 2px 8px #6366f122",
-                      zIndex: 3
-                    }}
-                    disabled={runLoading}
-                  >
-                    <Play size={26} />
-                  </button>
-                </div>
+ {/* Kod Blok*/}
+      <div style={{
+        background: "#18181b",
+        color: "#fafafa",
+        borderRadius: 8,
+        padding: 0,
+        fontFamily: "Fira Mono, Menlo, monospace",
+        fontSize: 11,
+        marginBottom: 12,
+        minHeight: 160,
+        maxHeight: 340,
+        overflow: "hidden",
+        boxShadow: "0 2px 8px #0001",
+        position: "relative"
+      }}>
+        {/* ÜSTTEKİ ICONLAR */}
+        <div style={{
+          position: "absolute", top: 14, right: 14, zIndex: 3, display: "flex", gap: 8
+        }}>
+          <button
+            onClick={() => setEditScriptOpen(true)}
+            title="Tam ekran kod editörü"
+            style={{
+              background: "#18181b", border: "none", color: "#f5f5f5",
+              borderRadius: 10, padding: 6, width: 38, height: 38,
+              cursor: "pointer"
+            }}
+          >
+            <Edit2 size={19} />
+          </button>
+          <button
+            onClick={() => copyToClipboard(selectedScript.code)}
+            title="Kodu panoya kopyala"
+            style={{
+              background: "#18181b", border: "none", color: "#ffc700",
+              borderRadius: 10, padding: 6, width: 38, height: 38,
+              cursor: "pointer"
+            }}
+          >
+            <Copy size={19} />
+          </button>
+        </div>
+        {/* KOD */}
+       <div
+          style={{
+            position: "relative",
+            minHeight: 140,
+            maxHeight: 340,
+            height: 500, // Sabit bir yükseklik, istersen farklı verebilirsin
+            background: "#18181b",
+            color: "#fafafa",
+            overflow: "hidden", // Dışta scroll yok
+          }}
+        >
+          <pre
+            style={{
+              margin: 0,
+              whiteSpace: "pre",
+              padding: 16,
+              minHeight: "100%",
+              maxHeight: "100%",
+              height: "100%",
+              overflowY: "auto", // <--- asıl scroll burada!
+              overflowX: "auto",
+            }}
+          >
+            {selectedScript.code}
+          </pre>
+        </div>
+        <button
+          style={{
+            position: "absolute", right: 18, bottom: 18,
+            background: "#6366f1", color: "#fff",
+            border: "none", borderRadius: "50%",
+            width: 46, height: 46,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 23,
+            cursor: runLoading || !selectedScript.code ? "not-allowed" : "pointer",
+            opacity: runLoading || !selectedScript.code ? 0.5 : 1,
+            boxShadow: "0 2px 8px #6366f133"
+          }}
+          onClick={handleRunSelectedScript}
+          disabled={runLoading || !selectedScript.code}
+          title="Çalıştır"
+        >
+          <Play size={24} />
+        </button>
+      </div>
                 <div style={{ color: "#999", fontSize: 13, marginLeft: 8 }}>{formatDate(selectedScript.createdAt)}</div>
               </div>
             )}
@@ -838,7 +852,12 @@ export default function ProjectPanel() {
               onDone={handleSaveNewScript} // value parametre olarak gelir
               onCancel={() => setNewScriptOpen(false)}
             />
-
+            {/* Prompt detay modalı */}
+            <PromptDetailsModal
+              open={promptDetailsOpen}
+              onClose={() => setPromptDetailsOpen(false)}
+              prompts={selected.prompts || []}
+            />
             {/* Çalıştırma geçmişi ve detay paneli */}
             <div>
               <div>
