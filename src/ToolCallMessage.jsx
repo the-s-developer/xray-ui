@@ -30,7 +30,7 @@ export function ToolCallWithResult({ call, result }) {
       overflow: "hidden",
     }}>{
       (typeof parsedResult === "object"
-        ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult).slice(0, 2)), null, 2)
+        ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult)), null, 2)
         : parsedResult).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
     </pre>
   );
@@ -138,7 +138,7 @@ export function ToolCallWithResult({ call, result }) {
               marginBottom: 16
             }}>
                   {(typeof parsedResult === "object"
-                    ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult).slice(0, 2)), null, 2)
+                    ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult)), null, 2)
                     : parsedResult).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
 
             </pre>            

@@ -97,7 +97,6 @@ export default function ProjectPanel() {
   const [selectedScript, setSelectedScript] = useState(null);
   const [filteredExecutions, setFilteredExecutions] = useState([]);
   const [selectedExecution, setSelectedExecution] = useState(null);
-  const [codeReadOnlyOpen, setCodeReadOnlyOpen] = useState(false);
 
   // Script edit/new modalları
   const [editScriptOpen, setEditScriptOpen] = useState(false);
@@ -421,6 +420,7 @@ export default function ProjectPanel() {
     setEditMode(true);
     setSelectedScript(null);
     setSelectedExecution(null);
+    setExpanded(false)
   }
 
   function handleEditProject() {

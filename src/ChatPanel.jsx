@@ -32,7 +32,6 @@ const statusMap = {
 
 function getStatusUI(state, tps) {
   const s = statusMap[state] || statusMap[AgentState.IDLE];
-  console.log("getStatusUI", state, s.icon, tps);
   return (
     <>
       <span style={{ fontSize: 18 }}>{s.icon}</span>
