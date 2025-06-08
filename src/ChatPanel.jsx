@@ -114,14 +114,21 @@ const styles = {
     flexDirection: "column",
     position: "relative", 
   },
+  systemBubble: { 
+    background: "#7f1d1d", 
+    color: "#fff", 
+    border: "2px solid #ef4444", 
+    borderRadius: 13, 
+    marginBottom: 12, 
+    padding: "20px 20px 20px 20px", 
+    fontWeight: 600, 
+    position: "relative" 
+  },
   userBubble: { 
     background: "#6366f1", 
     color: "#fff", 
     borderRadius: "14px 14px 2px 14px", 
-    paddingLeft: "30px", 
-    paddingTop: "10px", 
-    paddingBottom: "10px", 
-    paddingRight: "10px", 
+    padding: "40px 40px 40px 40px", 
     marginBottom: 8, 
     fontWeight: 500, 
     wordBreak:"break-word", width: "100%", 
@@ -132,10 +139,7 @@ const styles = {
     background: "#2d2d30", 
     color: "#f5f5f5", 
     borderRadius: "14px 14px 14px 2px", 
-    paddingLeft: "30px", 
-    paddingTop: "10px", 
-    paddingBottom: "10px", 
-    paddingRight: "10px", 
+    padding: "40px 40px 40px 40px", 
     marginBottom: 8, 
     fontWeight: 400, 
     wordBreak: "break-word", 
@@ -143,7 +147,7 @@ const styles = {
     boxSizing: "border-box", 
     position: "relative" 
   },
-  systemBubble: { background: "#7f1d1d", color: "#fff", border: "2px solid #ef4444", borderRadius: 13, marginBottom: 12, padding: "11px 18px", fontWeight: 600, position: "relative" },
+  
   inputWrapper: { 
     position: "sticky", 
     bottom: 0, 
