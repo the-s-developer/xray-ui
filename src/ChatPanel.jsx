@@ -120,7 +120,7 @@ const styles = {
     border: "2px solid #ef4444", 
     borderRadius: 13, 
     marginBottom: 12, 
-    padding: "20px 20px 20px 20px", 
+    padding: "30px 30px 30px 30px", 
     fontWeight: 600, 
     position: "relative" 
   },
@@ -128,7 +128,7 @@ const styles = {
     background: "#6366f1", 
     color: "#fff", 
     borderRadius: "14px 14px 2px 14px", 
-    padding: "40px 40px 40px 40px", 
+    padding: "30px 30px 30px 30px", 
     marginBottom: 8, 
     fontWeight: 500, 
     wordBreak:"break-word", width: "100%", 
