@@ -120,7 +120,7 @@ const styles = {
     border: "2px solid #ef4444", 
     borderRadius: 13, 
     marginBottom: 12, 
-    padding: "30px 30px 30px 30px", 
+    padding: "30px 30px 10px 30px", 
     fontWeight: 600, 
     position: "relative" 
   },
@@ -128,7 +128,7 @@ const styles = {
     background: "#6366f1", 
     color: "#fff", 
     borderRadius: "14px 14px 2px 14px", 
-    padding: "30px 30px 30px 30px", 
+    padding: "30px 30px 10px 30px", 
     marginBottom: 8, 
     fontWeight: 500, 
     wordBreak:"break-word", width: "100%", 
@@ -139,7 +139,7 @@ const styles = {
     background: "#2d2d30", 
     color: "#f5f5f5", 
     borderRadius: "14px 14px 14px 2px", 
-    padding: "40px 40px 40px 40px", 
+    padding: "40px 40px 10px 40px", 
     marginBottom: 8, 
     fontWeight: 400, 
     wordBreak: "break-word", 
@@ -339,6 +339,9 @@ useEffect(() => {
   }
   fetchModels();
 }, []);
+
+
+
 useEffect(() => {
   if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
 }, [defaultModel]);
@@ -356,6 +359,13 @@ useEffect(() => {
   function getBubbleFontSize() {
     return `${Math.round(16 * bubbleFontScale)}px`;
   }
+  function getCharCount(text) {
+  if (!text) return 0;
+  if (typeof text === "string") return text.length;
+  if (typeof text === "object") return JSON.stringify(text).length;
+  return String(text).length;
+}
+
   function copyToClipboard(text, label = "Panoya Kopyalandı!") {
     if (!text) return;
     if (navigator?.clipboard) {
@@ -587,6 +597,8 @@ async function sendMessage(e) {
           const key = item.meta?.id || idx;
           if (item.type === "chat") {
             if (item.role === "system") {
+              const charCount = getCharCount(item.content);
+
               return (
                 <div key={key} style={{ ...styles.systemBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={iconOverlayStyle}>
@@ -603,10 +615,15 @@ async function sendMessage(e) {
                       fontSize={getBubbleFontSize()}
                     />
                   </div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right", opacity: 0.75 }}>
+                  {charCount}
+                </div>                  
                 </div>
               );
             }
             if (item.role === "user") {
+              const charCount = getCharCount(item.content);
+
               return (
                 <div key={item["meta"]["id"]} style={{ ...styles.userBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={bubbleIconOverlayStyle}>
@@ -662,10 +679,15 @@ async function sendMessage(e) {
                     codeWrap={codeWrap}
                     fontSize={getBubbleFontSize()}
                   />
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right", opacity: 0.75 }}>
+                  {charCount}
+                </div>                  
                 </div>
               );
             }
             if (item.role === "assistant") {
+              const charCount = getCharCount(item.content);
+
               return (
                 <div key={item["meta"]["id"]} style={{ ...styles.botBubble, fontSize: getBubbleFontSize(), position: "relative" }}>
                   <div style={bubbleIconOverlayStyle}>
@@ -689,6 +711,9 @@ async function sendMessage(e) {
                     codeWrap={codeWrap}
                     fontSize={getBubbleFontSize()}
                   />
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right", opacity: 0.75 }}>
+                    {charCount}
+                  </div>                  
                 </div>
               );
             }

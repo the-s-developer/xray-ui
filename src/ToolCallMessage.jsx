@@ -1,8 +1,18 @@
 import React, { useState } from "react";
 import { Eye } from "lucide-react";
 
+
+function getCharCount(text) {
+  if (!text) return 0;
+  if (typeof text === "string") return text.length;
+  if (typeof text === "object") return JSON.stringify(text).length;
+  return String(text).length;
+}
+
+
 export function ToolCallWithResult({ call, result }) {
  const [modalOpen, setModalOpen] = useState(false);
+
 
   // Argüman özeti
   let parsedArgs = call?.function?.arguments;
@@ -33,6 +43,7 @@ export function ToolCallWithResult({ call, result }) {
         ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult)), null, 2)
         : parsedResult).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
     </pre>
+    
   );
 
   return (
@@ -146,6 +157,9 @@ export function ToolCallWithResult({ call, result }) {
           </div>
         </div>
       )}
+      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, textAlign: "right", opacity: 0.75 }}>
+        {getCharCount(result?.content)}
+      </div>      
     </div>
   );
 }
