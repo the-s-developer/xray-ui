@@ -1,5 +1,5 @@
 // src/ChatPanel.jsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { useLogContext } from "./LogContext";
 import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle , Scissors,Eraser} from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
@@ -10,6 +10,7 @@ import { useSettings } from "./SettingsContext";
 import { fetchWithLog } from "./utils/fetchWithLog";
 import { useCallContext } from "./CallContext";
 import toast from "react-hot-toast";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 const AgentState = {
   IDLE: "idle",
@@ -284,9 +285,23 @@ export default function ChatPanel({ memory }) {
   const [insertModalOpen, setInsertModalOpen] = useState(false);
 
 
+  const [showRaw, setShowRaw] = useState(false);
+  const [rawMessages, setRawMessages] = useState([]);
+  useEffect(() => {
+    if (showRaw) {
+      fetch("/api/chat/raw_messages")
+        .then(res => res.json())
+        .then(data => {
+          if (data) setRawMessages(data);
+        });
+    }
+  }, [showRaw, memory]);
+
+  const messagesToShow = showRaw ? rawMessages : memory;
+  const flattenedChat = getFlattenedChat(messagesToShow, true);
+
   const chatEndRef = useRef();
-  const flattenedChat = getFlattenedChat(memory, true);
-const inputRef = useRef();
+  const inputRef = useRef();
 
   // Streaming
   const [streamedAnswer, setStreamedAnswer] = useState("");
@@ -384,13 +399,65 @@ useEffect(() => {
   async function handleReplayUntil(targetId) {
     if (!defaultModel) return;
     setLoading(true);
-    await fetchWithLog(`/api/chat/replay_until/${targetId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: defaultModel }),
-    });
-    setLoading(false);
+    setStreaming(true);
+    setStreamedAnswer("");
+    setLastTps(null);
+
+    try {
+      const resp = await fetch(`/api/chat/replay_until/${targetId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: defaultModel }),
+      });
+
+      if (resp.status === 409) {
+        toast.error("Zaten bir işlem çalışıyor! Lütfen bitmesini veya durdurulmasını bekleyin.");
+        setStreaming(false);
+        setLoading(false);
+        return;
+      }
+
+      if (!resp.body) throw new Error("Stream başlatılamadı!");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        chunk.split(/\r?\n/).forEach((line) => {
+          if (!line.startsWith("data:")) return;
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr) return;
+
+          try {
+            const payload = JSON.parse(jsonStr);
+            switch (payload.type) {
+              case "partial_assistant":
+                setStreamedAnswer(payload.content);
+                break;
+              case "end":
+                setStreamedAnswer("");
+                setLastTps(payload.tps || null);
+                break;
+              default:
+                break;
+            }
+          } catch {
+            setStreamedAnswer((prev) => prev + jsonStr);
+          }
+        });
+      }
+    } catch (err) {
+      toast.error("Stream error: " + err.message);
+    } finally {
+      setStreaming(false);
+      setLoading(false);
+    }
   }
+
   async function handleReplay() {
     if (!defaultModel) return;
     setLoading(true);
@@ -560,6 +627,13 @@ async function sendMessage(e) {
     <option key={m.value} value={m.value}>{m.label}</option>
   ))}
 </select>
+      <ToggleSwitch
+        checked={showRaw}
+        onChange={e => setShowRaw(e.target.checked)}
+        label=""
+      />
+
+
   <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
    
    <button
