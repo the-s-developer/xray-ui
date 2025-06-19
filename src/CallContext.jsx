@@ -47,13 +47,11 @@ export function CallProvider({ children }) {
         return; // diğer eventlere bakmadan çık
       }
       if (parsed.event === "memory_update") {
-        console.log("memory update",msg)
         setMemory(parsed.data);
       } else if (parsed.event === "tools_updated") {
         setToolVersion(Date.now());
       } else if (parsed.event === "agent_status") {
         setAgentStatus(parsed.data);
-        console.log("agent status",agentStatus,parsed)
       }
       else if (parsed.event === "error") {
         // log drawer’a ekle
