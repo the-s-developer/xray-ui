@@ -53,6 +53,20 @@ export function CallProvider({ children }) {
         setToolVersion(Date.now());
       } else if (parsed.event === "agent_status") {
         setAgentStatus(parsed.data);
+        console.log("agent status",agentStatus,parsed)
+      }
+      else if (parsed.event === "error") {
+        // log drawer’a ekle
+        window.xrayLogs = window.xrayLogs || [];
+        window.xrayLogs.push({
+          id: Math.random().toString(36).slice(2),
+          type: "error",
+          message: parsed.message,
+          detail: parsed.detail,
+          timestamp: parsed.timestamp,
+          path: parsed.path,
+        });
+        window.dispatchEvent(new CustomEvent("xraylogupdate"));
       }
     };
 

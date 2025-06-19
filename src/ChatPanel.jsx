@@ -30,14 +30,18 @@ const statusMap = {
   [AgentState.STOPPED]: { icon: "🟠", color: "#f97316", text: "Durduruldu" },
 };
 
-function getStatusUI(state, tps) {
+function getStatusUI(state, tps, loop, maxLoop) {
   const s = statusMap[state] || statusMap[AgentState.IDLE];
+  console.log("----------->",loop)
   return (
     <>
       <span style={{ fontSize: 18 }}>{s.icon}</span>
       <span style={{ fontSize: 13, color: "white", fontWeight: 600 }}>
         {typeof tps === "number" && !isNaN(tps) ? `${tps.toFixed(2)} t/s` : ""}
       </span>
+      {typeof loop === "number" && typeof maxLoop === "number" && (
+        <span style={{marginLeft: 7, color: "#facc15"}}>{loop}/{maxLoop}</span>
+      )}      
     </>
   );
 }
@@ -302,7 +306,6 @@ export default function ChatPanel() {
   // Streaming
   const [streamedAnswer, setStreamedAnswer] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [lastTps, setLastTps] = useState(0);
   const jobActive = streaming || [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state);
 
   useEffect(() => {
@@ -396,8 +399,7 @@ useEffect(() => {
     setLoading(true);
     setStreaming(true);
     setStreamedAnswer("");
-    setLastTps(null);
-
+    
     try {
       const resp = await fetch(`/api/chat/replay_until/${targetId}`, {
         method: "POST",
@@ -435,7 +437,6 @@ useEffect(() => {
                 break;
               case "end":
                 setStreamedAnswer("");
-                setLastTps(payload.tps || null);
                 break;
               default:
                 break;
@@ -470,7 +471,6 @@ async function handleReset() {
     setLoading(false);
     setStreamedAnswer("");
     setStreaming(false);
-    setLastTps(0);
     // Diğer tüm state'leri de sıfırlayabilirsin.
   }
 }
@@ -520,7 +520,6 @@ async function sendMessage(e) {
   setLoading(true);
   setStreaming(true);
   setStreamedAnswer("");
-  setLastTps(null);
 
   // --- Mesajı hemen temizle ve inputa fokus at ---
   setMessage("");
@@ -563,7 +562,6 @@ async function sendMessage(e) {
               break;
             case "end":
               setStreamedAnswer("");
-              setLastTps(payload.tps || null);
               break;
             default:
               break;
@@ -606,7 +604,7 @@ async function sendMessage(e) {
   color: statusMap[agentStatus.state]?.color ?? "#ffe066",
   letterSpacing: 0.3,
 }}>
-  {getStatusUI(agentStatus.state, lastTps)}
+  {getStatusUI(agentStatus.state, agentStatus.tps, agentStatus.loop, agentStatus.max_loop)}
 </div>
 <select
   style={selectStyle}
