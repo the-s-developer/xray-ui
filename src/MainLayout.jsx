@@ -4,7 +4,6 @@ import ChatPanel from "./ChatPanel";
 import { ToolsPanel } from "./ToolPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import ScriptPanel from "./ScriptPanel";
-import { useCallContext } from "./CallContext"; // <-- güncel context
 import ProjectPanel from "./ProjectPanel";
 import { Toaster } from "react-hot-toast";
 
@@ -12,9 +11,6 @@ export default function MainLayout() {
   const [selected, setSelected] = useState("chat");
   const [leftWidth, setLeftWidth] = useState(1024);
   const dragging = useRef(false);
-  const { eventData, agentStatus } = useCallContext();
-  const memory = eventData.memory || null;
-  const toolsVersion = eventData.toolsVersion || 0;
 
   function onMouseMove(e) {
     if (!dragging.current) return;
@@ -37,13 +33,13 @@ export default function MainLayout() {
       <>
 
         <div style={{ display: selected === "chat" ? "block" : "none", height: "100%", width: "100%" }}>
-          <ChatPanel memory={memory} agentStatus={agentStatus} />
+          <ChatPanel/>
         </div>
         <div style={{ display: selected === "project" ? "block" : "none", height: "100%", width: "100%" }}>
           <ProjectPanel />
         </div>
         <div style={{ display: selected === "tools" ? "block" : "none", height: "100%", width: "100%" }}>
-          <ToolsPanel toolsVersion={toolsVersion} />
+          <ToolsPanel/>
         </div>
         <div style={{ display: selected === "settings" ? "block" : "none", height: "100%", width: "100%" }}>
           <SettingsPanel />

@@ -7,7 +7,9 @@ export function CallProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
   const handlersRef = useRef({}); // tool_name => handlerFn
-  const [eventData, setEventData] = useState({}); // {memory, tools, ...}
+  const [memory, setMemory] = useState(null);
+  const [toolVersion, setToolVersion] = useState({});
+
   const [agentStatus, setAgentStatus] = useState({state: "idle"});
 
   // --- WebSocket kurulum
@@ -44,13 +46,11 @@ export function CallProvider({ children }) {
         }
         return; // diğer eventlere bakmadan çık
       }
-      // Diğer eventData güncellemeleri
       if (parsed.event === "memory_update") {
-        setEventData(e => ({ ...e, memory: parsed.data }));
+        console.log("memory update",msg)
+        setMemory(parsed.data);
       } else if (parsed.event === "tools_updated") {
-        setEventData(e => ({ ...e, toolsVersion: Date.now() }));
-      } else if (parsed.event === "tool_result") {
-        setEventData(e => ({ ...e, lastToolResult: parsed }));
+        setToolVersion(Date.now());
       } else if (parsed.event === "agent_status") {
         setAgentStatus(parsed.data);
       }
@@ -70,7 +70,8 @@ export function CallProvider({ children }) {
     <CallContext.Provider value={{
       ws: wsRef.current,
       connected,
-      eventData,
+      memory,
+      toolVersion,
       agentStatus,
       registerToolHandler
     }}>

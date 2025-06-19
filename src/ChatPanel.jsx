@@ -1,6 +1,5 @@
 // src/ChatPanel.jsx
 import React, { useState, useRef, useEffect, memo } from "react";
-import { useLogContext } from "./LogContext";
 import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle , Scissors,Eraser} from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import MarkdownMessage from "./MarkdownMessage";
@@ -218,6 +217,7 @@ const bubbleIconOverlayStyle = {
 
 
 function getFlattenedChat(memory, showTools = true) {
+  console.log("getFlattenedChat",memory);
   if (!memory?.messages) return [];
 
   const result = [];
@@ -227,48 +227,43 @@ function getFlattenedChat(memory, showTools = true) {
     // USER/SYSTEM
     if (msg.role === "user" || msg.role === "system") {
       if (msg.content != null) result.push({ type: "chat", ...msg });
-      continue;
     }
-
-    // ASSISTANT
-    if (msg.role === "assistant") {
+    else if (msg.role === "assistant") {
       if (msg.content != null) result.push({ type: "chat", ...msg });
       if (showTools && msg.tool_calls) {
+        console.log("msg.role:assistant:tool_calls",msg);
+
         for (const tc of msg.tool_calls) {
           pendingCalls.set(tc.id, { ...tc, parentRole: msg.role, id: msg["meta"]["id"] });
         }
       }
-      continue;
     }
-
-    // TOOL (result)
-    if (showTools && msg.role === "tool") {
+    else if (showTools && msg.role === "tool") {
+      console.log("msg.role:tool",msg);
       const callMeta = pendingCalls.get(msg.tool_call_id);
       if (callMeta) {
         // Eşleşti → birlikte göster
         result.push({ type: "tool_combo", call: callMeta, result: msg });
         pendingCalls.delete(msg.tool_call_id);
       } else {
-        // Eşleşemedi → bağımsız göster
-        result.push({ type: "tool_result", ...msg });
+        console.error("tool response is not matched !");
       }
-      continue;
+    }
+    else{
+      console.error("role is not matched",msg);
     }
   }
-  // Kalan yetim tool-calls'ı ister göster ister gösterme
-  // pendingCalls.forEach(call => result.push({ type:"tool_call_orphan", call }));
-
   return result;
 }
 
 
 
-export default function ChatPanel({ memory }) {
+export default function ChatPanel() {
 
 
   const { settings, updateSettings } = useSettings();
   const { showImagePreview, showCodeLineNumbers, codeWrap, enterToSend, bubbleFontScale } = settings;
-  const { agentStatus } = useCallContext();
+  const {memory, agentStatus } = useCallContext();
 
    const [modelOptions, setModelOptions] = useState([]);
   const [defaultModel, setDefaultModel] = useState("");
@@ -285,20 +280,21 @@ export default function ChatPanel({ memory }) {
   const [insertModalOpen, setInsertModalOpen] = useState(false);
 
 
-  const [showRaw, setShowRaw] = useState(false);
-  const [rawMessages, setRawMessages] = useState([]);
-  useEffect(() => {
-    if (showRaw) {
-      fetch("/api/chat/raw_messages")
-        .then(res => res.json())
-        .then(data => {
-          if (data) setRawMessages(data);
-        });
-    }
-  }, [showRaw, memory]);
+  // const [showRaw, setShowRaw] = useState(false);
+  // const [rawMessages, setRawMessages] = useState([]);
+  // useEffect(() => {
+  //   if (showRaw) {
+  //     fetch("/api/chat/raw_messages")
+  //       .then(res => res.json())
+  //       .then(data => {
+  //         if (data) setRawMessages(data);
+  //       });
+  //   }
+  // }, [showRaw, memory]);
 
-  const messagesToShow = showRaw ? rawMessages : memory;
-  const flattenedChat = getFlattenedChat(messagesToShow, true);
+  // const messagesToShow = showRaw ? rawMessages : memory;
+  
+  const flattenedChat = getFlattenedChat(memory, true);
 
   const chatEndRef = useRef();
   const inputRef = useRef();
@@ -306,9 +302,8 @@ export default function ChatPanel({ memory }) {
   // Streaming
   const [streamedAnswer, setStreamedAnswer] = useState("");
   const [streaming, setStreaming] = useState(false);
-const [lastTps, setLastTps] = useState(0);
-const jobActive = streaming ||
-  [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state);
+  const [lastTps, setLastTps] = useState(0);
+  const jobActive = streaming || [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state);
 
   useEffect(() => {
     if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
@@ -627,11 +622,11 @@ async function sendMessage(e) {
     <option key={m.value} value={m.value}>{m.label}</option>
   ))}
 </select>
-      <ToggleSwitch
+      {/* <ToggleSwitch
         checked={showRaw}
         onChange={e => setShowRaw(e.target.checked)}
         label=""
-      />
+      /> */}
 
 
   <div style={{ display: "flex", alignItems: "center", gap: 0 }}>

@@ -68,8 +68,7 @@ function parseParamValues(fn, values) {
 }
 
 export function ToolsPanel() {
-  const { eventData } = useCallContext();
-  const toolsVersion = eventData.toolsVersion || 0;
+  const { toolsVersion } = useCallContext();
   const [tools, setTools] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [runResult, setRunResult] = useState({});
