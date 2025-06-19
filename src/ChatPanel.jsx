@@ -32,7 +32,6 @@ const statusMap = {
 
 function getStatusUI(state, tps, loop, maxLoop) {
   const s = statusMap[state] || statusMap[AgentState.IDLE];
-  console.log("----------->",loop)
   return (
     <>
       <span style={{ fontSize: 18 }}>{s.icon}</span>
@@ -221,7 +220,6 @@ const bubbleIconOverlayStyle = {
 
 
 function getFlattenedChat(memory, showTools = true) {
-  console.log("getFlattenedChat",memory);
   if (!memory?.messages) return [];
 
   const result = [];
@@ -235,15 +233,12 @@ function getFlattenedChat(memory, showTools = true) {
     else if (msg.role === "assistant") {
       if (msg.content != null) result.push({ type: "chat", ...msg });
       if (showTools && msg.tool_calls) {
-        console.log("msg.role:assistant:tool_calls",msg);
-
         for (const tc of msg.tool_calls) {
           pendingCalls.set(tc.id, { ...tc, parentRole: msg.role, id: msg["meta"]["id"] });
         }
       }
     }
     else if (showTools && msg.role === "tool") {
-      console.log("msg.role:tool",msg);
       const callMeta = pendingCalls.get(msg.tool_call_id);
       if (callMeta) {
         // Eşleşti → birlikte göster
@@ -263,7 +258,6 @@ function getFlattenedChat(memory, showTools = true) {
 
 
 export default function ChatPanel() {
-
 
   const { settings, updateSettings } = useSettings();
   const { showImagePreview, showCodeLineNumbers, codeWrap, enterToSend, bubbleFontScale } = settings;
@@ -303,7 +297,6 @@ export default function ChatPanel() {
   const chatEndRef = useRef();
   const inputRef = useRef();
 
-  // Streaming
   const [streamedAnswer, setStreamedAnswer] = useState("");
   const [streaming, setStreaming] = useState(false);
   const jobActive = streaming || [AgentState.GENERATING, AgentState.TOOL_CALLING].includes(agentStatus.state);
@@ -318,9 +311,23 @@ export default function ChatPanel() {
     }
   }, []);
 
+
+  // Sadece yeni mesaj geldiğinde scroll
+  const lastMessageIdRef = useRef();
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [flattenedChat, streamedAnswer]);
+    const lastMsg = flattenedChat.length ? flattenedChat[flattenedChat.length - 1] : null;
+    const newId = lastMsg?.meta?.id || null;
+    if (newId && lastMessageIdRef.current !== newId) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      lastMessageIdRef.current = newId;
+    }
+  }, [flattenedChat]);
+
+  // Streaming sırasında scroll (istersen)
+  useEffect(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [streamedAnswer]);
+
 
   useEffect(() => {
     setFullScreenEditorOpen(false);
@@ -331,55 +338,55 @@ export default function ChatPanel() {
     setStreaming(false);
   }, [memory]);
 
-useEffect(() => {
-  async function fetchModels() {
-    try {
-      const res = await fetch("/api/models");
-      const data = await res.json();
-      if (Array.isArray(data.models)) {
-        setModelOptions(data.models);
-        // LocalStorage veya ilk model:
-        const saved = localStorage.getItem("selectedModel");
-        if (saved && data.models.some(m => m.value === saved)) {
-          setDefaultModel(saved);
-        } else if (data.models.length) {
-          setDefaultModel(data.models[0].value);
+  useEffect(() => {
+    async function fetchModels() {
+      try {
+        const res = await fetch("/api/models");
+        const data = await res.json();
+        if (Array.isArray(data.models)) {
+          setModelOptions(data.models);
+          // LocalStorage veya ilk model:
+          const saved = localStorage.getItem("selectedModel");
+          if (saved && data.models.some(m => m.value === saved)) {
+            setDefaultModel(saved);
+          } else if (data.models.length) {
+            setDefaultModel(data.models[0].value);
+          }
         }
+      } catch (err) {
+        setModelOptions([]);
       }
-    } catch (err) {
-      setModelOptions([]);
     }
-  }
-  fetchModels();
-}, []);
+    fetchModels();
+  }, []);
 
-
-
-useEffect(() => {
-  if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
-}, [defaultModel]);
-  
+  useEffect(() => {
+    if (defaultModel) localStorage.setItem("selectedModel", defaultModel);
+  }, [defaultModel]);
+    
   function onEditBubble(content, id) {
-    console.log(`onEditBubble: ${content}, ${id}`); 
     setEditorInitialValue(content ?? "");
     setEditorBubbleId(id);
     setFullScreenEditorOpen(true);
   }
+
   function onEditAssistantBubble(content) {
     setAssistantEditorInitialValue(content ?? "");
     setAssistantEditorOpen(true);
   }
+
   function getBubbleFontSize() {
     return `${Math.round(16 * bubbleFontScale)}px`;
   }
+
   function getCharCount(text) {
-  if (!text) return 0;
-  if (typeof text === "string") return text.length;
-  if (typeof text === "object") return JSON.stringify(text).length;
-  return String(text).length;
+    if (!text) return 0;
+    if (typeof text === "string") return text.length;
+    if (typeof text === "object") return JSON.stringify(text).length;
+    return String(text).length;
 }
 
-  function copyToClipboard(text, label = "Panoya Kopyalandı!") {
+function copyToClipboard(text, label = "Panoya Kopyalandı!") {
     if (!text) return;
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(text).then(() => toast.success(label));
@@ -464,16 +471,16 @@ useEffect(() => {
     });
     setLoading(false);
   }
-async function handleReset() {
-  if (window.confirm("Konuşma hafızası ve aktif işler tamamen sıfırlansın mı?")) {
-    setLoading(true);
-    await fetchWithLog('/api/chat/restart', { method: 'POST' });
-    setLoading(false);
-    setStreamedAnswer("");
-    setStreaming(false);
-    // Diğer tüm state'leri de sıfırlayabilirsin.
+
+  async function handleReset() {
+    if (window.confirm("Konuşma hafızası ve aktif işler tamamen sıfırlansın mı?")) {
+      setLoading(true);
+      await fetchWithLog('/api/chat/restart', { method: 'POST' });
+      setLoading(false);
+      setStreamedAnswer("");
+      setStreaming(false);
+    }
   }
-}
 
   async function onFullScreenEditorDone(value) {
     setFullScreenEditorOpen(false);
@@ -494,7 +501,6 @@ async function handleReset() {
   }
 
   function handleAssistantInsert(afterId) {
-    console.log("handleAssistantInsert", afterId);
     setInsertAfterId(afterId);
     setInsertModalOpen(true);
   }
