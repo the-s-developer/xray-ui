@@ -1,6 +1,6 @@
 // src/ChatPanel.jsx
 import React, { useState, useRef, useEffect, memo } from "react";
-import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle , Scissors,Eraser} from "lucide-react";
+import { Play, Send, Edit2, Eye, Plus, RotateCw, Trash2, Copy, Bot, Terminal,Square,StopCircle , Scissors,Eraser ,Repeat2} from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import MarkdownMessage from "./MarkdownMessage";
 import FullScreenCodeEditor from "./FullScreenCodeEditor";
@@ -218,6 +218,31 @@ const bubbleIconOverlayStyle = {
 };
 
 
+const maxLoopBoxStyle = {
+  display: "flex",
+  alignItems: "center",
+  background: "#18181b",
+  color: "#facc15",      // Turkuaz-mavi
+  borderRadius: 8,
+  padding: "2px 8px 2px 4px",
+  marginRight: 10,
+  minWidth: 60,
+  boxShadow: "0 1px 4px #0002",
+  gap: 5,
+};
+
+const maxLoopSelectStyle = {
+  background: "#18181b",
+  color: "#facc15",
+  border: "none",
+  fontWeight: 700,
+  fontSize: 15,
+  padding: "2px 8px",
+  outline: "none",
+  appearance: "none",
+  minWidth: 38,
+  cursor: "pointer",
+};
 
 function getFlattenedChat(memory, showTools = true) {
   if (!memory?.messages) return [];
@@ -277,6 +302,8 @@ export default function ChatPanel() {
   const [insertAfterId, setInsertAfterId] = useState(null);
   const [insertModalOpen, setInsertModalOpen] = useState(false);
 
+  const [maxLoop, setMaxLoop] = useState(10);
+  const maxLoopOptions = [2, 4, 6, 8, 10, 12, 15, 20, 30];
 
   // const [showRaw, setShowRaw] = useState(false);
   // const [rawMessages, setRawMessages] = useState([]);
@@ -632,7 +659,26 @@ async function sendMessage(e) {
         label=""
       /> */}
 
-
+<div style={maxLoopBoxStyle} title="Max Tool Loop">
+  <Repeat2 size={18} style={{ color: "#fff" }} />
+  <select
+    style={maxLoopSelectStyle}
+    value={maxLoop}
+    onChange={async e => {
+      const newVal = parseInt(e.target.value, 10);
+      setMaxLoop(newVal);
+      await fetch("/api/settings/max_tool_loop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: newVal }),
+      });
+    }}
+  >
+    {maxLoopOptions.map(opt => (
+      <option key={opt} value={opt} style={{ color: "#333", background: "#fff" }}>{opt}</option>
+    ))}
+  </select>
+</div>
   <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
    
    <button
