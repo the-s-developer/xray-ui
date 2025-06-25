@@ -1,10 +1,12 @@
 # 🧠 XRAY: Context-Aware LLM Agentic Prompt Optimization Tool 
 
-# <img src="./assets/ss1.jpg" alt="screenshot" style="vertical-align: middle; height: 24px;" /> DB-GPT: AI Native Data App Development framework with AWEL and Agents
 
 XRAY is a memory-centric, OpenAI-compatible LLM orchestrator that supports function-calling (tool-calls), context replay, and persistent memory snippets via token-based referencing.
 
-[screenshot](images/ss1.jpg)
+<p align="left">
+  <img src="./assets/ss1.jpg" width="100%" />
+</p>
+
 
 ## 🚀 Features
 
