@@ -98,6 +98,7 @@ export default function MarkdownMessage({
         rehypePlugins={[rehypeHighlight]}
         remarkPlugins={[remarkGfm]}
  components={{
+  img: () => null, // img etiketlerini gizle
   
 code({ inline, className, node, children, ...props }) {
   // 1️⃣  ham kodu mümkünse node’dan al

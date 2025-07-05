@@ -41,7 +41,7 @@ export default function ScriptPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tool_name: "python-environment__execute",
+          tool_name: "scraper__run_python_scraper_script",
           params: { "python_code":code }
         }),
       });

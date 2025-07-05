@@ -13,38 +13,43 @@ function getCharCount(text) {
 export function ToolCallWithResult({ call, result }) {
  const [modalOpen, setModalOpen] = useState(false);
 
+// Argüman özeti
+let parsedArgs = call?.function?.arguments;
+try { parsedArgs = typeof parsedArgs === "string" ? JSON.parse(parsedArgs) : parsedArgs; } catch {}
+const safeParsedArgs = parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)
+  ? parsedArgs
+  : {};
 
-  // Argüman özeti
-  let parsedArgs = call?.function?.arguments;
-  try { parsedArgs = typeof parsedArgs === "string" ? JSON.parse(parsedArgs) : parsedArgs; } catch {}
-  let argEntries = parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)
-    ? Object.entries(parsedArgs)
-    : [];
+let argEntries = Object.entries(safeParsedArgs || {});
 
-  // Sonuç özeti
-  let parsedResult = result?.content;
-  try { parsedResult = typeof parsedResult === "string" ? JSON.parse(parsedResult) : parsedResult; } catch {}
+// Sonuç özeti
+let parsedResult = result?.content;
+try { parsedResult = typeof parsedResult === "string" ? JSON.parse(parsedResult) : parsedResult; } catch {}
+const safeParsedResult = parsedResult && typeof parsedResult === "object" && !Array.isArray(parsedResult)
+  ? parsedResult
+  : {};
 
   // Markdown özet (ilk iki key veya metin)
-  const resultSummary = (
-   <pre style={{
-      background: "#15181f",
-      color: "#cffafe",
-      padding: 10,
-      borderRadius: 6,
-      fontSize: 11,
-      whiteSpace: "pre-wrap",
-      fontFamily: "Fira Mono, monospace",
-      margin: 0,
-      maxHeight: 300,
-      overflow: "hidden",
-    }}>{
-      (typeof parsedResult === "object"
-        ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult)), null, 2)
-        : parsedResult).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
-    </pre>
-    
-  );
+
+const resultSummary = (
+ <pre style={{
+    background: "#15181f",
+    color: "#cffafe",
+    padding: 10,
+    borderRadius: 6,
+    fontSize: 11,
+    whiteSpace: "pre-wrap",
+    fontFamily: "Fira Mono, monospace",
+    margin: 0,
+    maxHeight: 300,
+    overflow: "hidden",
+  }}>{
+    (typeof safeParsedResult === "object"
+      ? JSON.stringify(Object.fromEntries(Object.entries(safeParsedResult)), null, 2)
+      : safeParsedResult
+    ).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
+  </pre>
+);
 
   return (
     <div
@@ -92,7 +97,8 @@ export function ToolCallWithResult({ call, result }) {
           : undefined
       }}>
         {resultSummary}
-        {typeof parsedResult === "object" && Object.entries(parsedResult).length > 2 && <span>...</span>}
+        {typeof parsedResult === "object" && Object.entries(safeParsedResult).length > 2 && <span>...</span>}
+        
       </div>
       {/* Modal */}
       {modalOpen && (
@@ -129,10 +135,11 @@ export function ToolCallWithResult({ call, result }) {
               fontFamily: "Fira Mono, monospace",
               marginBottom: 16
             }}>
-                <pre>{(typeof parsedArgs === "object"
-                  ?JSON.stringify(Object.fromEntries(Object.entries(parsedArgs)), null, 2)
-                  : parsedArgs).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
-                </pre>
+                <pre>{(typeof parsedArgs === "object" && parsedArgs !== null
+                ? JSON.stringify(Object.fromEntries(Object.entries(parsedArgs)), null, 2)
+                : String(parsedArgs || "")
+              ).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
+              </pre>
             </pre>
             <pre style={{
               background: "#223135",
@@ -149,7 +156,7 @@ export function ToolCallWithResult({ call, result }) {
               marginBottom: 16
             }}>
                   {(typeof parsedResult === "object"
-                    ?JSON.stringify(Object.fromEntries(Object.entries(parsedResult)), null, 2)
+                    ?JSON.stringify(Object.fromEntries(Object.entries(safeParsedResult)), null, 2)
                     : parsedResult).replace(/"/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "  ")}
 
             </pre>            
